@@ -82,7 +82,7 @@ def computeOrig2pred(orig_label, pred):
         hashOrig2Pred[v] = np.bincount( pred[idx], minlength=n_classes )
     return hashOrig2Pred
 
-def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer, optimizerD, loss_bce, device):
+def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer, optimizerD, loss_bce, device, path_file):
     model.eval()
     noiser.train()
     discr.train()
@@ -102,7 +102,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             x_batch = x_batch.to(device)
             y_batch = y_batch.to(device)
             to_add = noiser(x_batch)
-            
+ 
             x_cf = x_batch+to_add
             pred_cl = model(x_cf)
             prob_cl = torch.nn.functional.softmax(pred_cl,dim=1)
@@ -111,7 +111,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             loss_classif = torch.mean( -torch.log( 1. - prob + torch.finfo(torch.float32).eps ) )
             
             #L1 regularizer
-            reg_L1 = torch.mean( torch.sum( torch.abs(torch.squeeze(to_add)), dim=1) )
+            reg_L1 = .5 * torch.mean( torch.sum( torch.abs(torch.squeeze(to_add)), dim=1) )
             #loss += reg
             loss = loss_classif + reg_L1
 
@@ -120,31 +120,24 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             loss = loss + reg_entro
             
             #Total Variation Regularizer
-            reg_tv = torch.mean( torch.sum( torch.square( torch.squeeze(to_add[:,:,1:] - to_add[:,:,:-1]) ),dim=1) )
+            reg_tv = torch.mean( torch.sum( torch.abs( torch.squeeze(to_add[:,:,1:] - to_add[:,:,:-1]) ),dim=1) )
             loss = loss + reg_tv
 
 
             #L2 Regularization
-            reg_L2 = torch.mean( torch.sum( torch.square(torch.squeeze(to_add)), dim=1) )
-            #loss += reg
-            loss = loss + reg_L2
+            #reg_L2 = torch.mean( torch.sum( torch.square(torch.squeeze(to_add)), dim=1) )
+            #loss = loss + reg_L2
             
             #magnitude, _ = torch.max( torch.abs( torch.squeeze(x_cf) - torch.squeeze(x_batch) ), dim=1)
             #reg_sim = torch.mean( magnitude )
             #loss+=reg_sim
-            
+            '''
             loss_d = 0.0
             
             '''
             discr.zero_grad()
             real_output = discr( x_batch ).view(-1)
-            #real_output = torch.squeeze(real_output)
-            #real_labels = torch.Tensor([1.] * real_output.shape[0]).to(device)
-            #real_loss = loss_bce(real_labels, real_output)
-
             fake_output = discr( x_batch + to_add.detach() ).view(-1)
-            #fake_output = torch.squeeze(fake_output)
-            #fake_output = real_output 
 
             optimizerD.zero_grad()
             loss_d = discriminator_loss(real_output, fake_output, loss_bce, device)
@@ -158,21 +151,21 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             loss_g = generator_loss(fake_output_2, loss_bce, device)
 
             loss = loss + loss_g
-            '''
-            
             
             loss.backward()
             optimizer.step()
 
            
             loss_acc.append( loss.cpu().detach().numpy() )
-            loss_discr.append( 0 )
-            #loss_discr.append( loss_d.cpu().detach().numpy())
+            #loss_discr.append( 0 )
+            loss_discr.append( loss_d.cpu().detach().numpy())
             loss_reg_L1.append(reg_L1.cpu().detach().numpy() )
             loss_cl.append(loss_classif.cpu().detach().numpy() )
             loss_reg_entro.append(reg_entro.cpu().detach().numpy() )
             loss_reg_tv.append( reg_tv.cpu().detach().numpy())
-            loss_reg_L2.append( reg_L2.cpu().detach().numpy())
+            #loss_reg_tv.append( 0 )
+            #loss_reg_L2.append( reg_L2.cpu().detach().numpy())
+            loss_reg_L2.append( 0 )
 
         print("epoch %d with Gen loss %f (l_CL %f and reg_L1 %f and l_entro %f and l_TV %f and reg_L2 %f) and Discr Loss %f"%(e, np.mean(loss_acc), np.mean(loss_cl), np.mean(loss_reg_L1), np.mean(loss_reg_entro), np.mean(loss_reg_tv), np.mean(loss_reg_L2), np.mean(loss_discr)))
         data, dataCF, pred, orig_label = generateOrigAndAdd(model, noiser, train, device)
@@ -193,6 +186,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
         #plt.waitforbuttonpress(0) # this will wait for indefinite time
         #plt.close(fig)
         #exit()
+        torch.save(noiser.state_dict(), path_file)
         sys.stdout.flush()
 
 
@@ -298,9 +292,9 @@ def main(argv):
     for p in model.parameters():
         p.requires_grad = False
 
-
+    path_file_noiser = "noiser_weights"
     #trainModel(model, train_dataloader, valid_dataloader, n_epochs, loss_ce, optimizer, file_path, device)
-    trainModelNoise(model, noiser, discr, train_dataloader, n_epochs, n_classes, optimizer, optimizerD, loss_bce, device)
+    trainModelNoise(model, noiser, discr, train_dataloader, n_epochs, n_classes, optimizer, optimizerD, loss_bce, device, path_file_noiser)
     
     #print( model.parameters() )
     #exit()
