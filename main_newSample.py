@@ -18,7 +18,7 @@ import torch.nn.functional as F
 #matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
-from model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
+from model import MLPClassif, MLPBranch, Noiser, Discr
 
 #torch.save(model.state_dict(), PATH)
 
@@ -31,9 +31,6 @@ def discriminator_loss(real_output, fake_output, loss_bce, device):
     #fake_labels = torch.full((fake_output.shape[0],), 0., dtype=torch.float, device=device)
     real_labels = torch.Tensor([1.] * real_output.shape[0]).to(device)
     fake_labels = torch.Tensor([0.] * fake_output.shape[0]).to(device)
-    #print("real_output ",real_output)
-    #print("fake_output ",fake_output)
-
     real_loss = loss_bce(real_output, real_labels)
     fake_loss = loss_bce(fake_output, fake_labels)
     total_loss = (real_loss + fake_loss ) /2
@@ -68,10 +65,11 @@ def generateOrigAndAdd(model, noiser, train, device):
     noiser.eval()
     for x_batch, y_batch in train:
         x_batch = x_batch.to(device)
-        to_add = noiser(x_batch)
-        pred = model(x_batch+to_add)
+        x_cf = noiser(x_batch)
+        pred = model(x_cf)
         data.append(x_batch.cpu().detach().numpy())
-        dataCF.append(x_batch.cpu().detach().numpy()+ to_add.cpu().detach().numpy())
+        dataCF.append( x_cf.cpu().detach().numpy())
+        #dataCF.append(x_batch.cpu().detach().numpy()+ to_add.cpu().detach().numpy())
         prediction.append( np.argmax( pred.cpu().detach().numpy(),axis=1) )
         orig_label.append( y_batch.cpu().detach().numpy() )
     return np.concatenate(data,axis=0), np.concatenate(dataCF,axis=0), np.concatenate(prediction,axis=0), np.concatenate(orig_label,axis=0)
@@ -98,53 +96,41 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
         loss_reg_entro = []
         loss_cl = []
         loss_reg_tv = []
-        loss_generator = []
 
         for x_batch, y_batch in train:
             noiser.zero_grad()
-            discr.zero_grad()
-            optimizerD.zero_grad()
-            optimizer.zero_grad()
             
             x_batch = x_batch.to(device)
             y_batch = y_batch.to(device)
-            to_add = noiser(x_batch)
- 
-            x_cf = x_batch+to_add
+            x_cf = noiser(x_batch)
+            #print(x_cf)
+            #exit()
+            #x_cf = x_batch+to_add
             pred_cl = model(x_cf)
-
-            '''
-            print("x_batch ",x_batch)
-            print("to_add ", to_add)
-            print("x_cf ", x_cf)
-            '''
-
             prob_cl = torch.nn.functional.softmax(pred_cl,dim=1)
             y_ohe = F.one_hot(y_batch.long(), num_classes=n_classes)
             prob = torch.sum(prob_cl * y_ohe,dim=1)
             loss_classif = torch.mean( -torch.log( 1. - prob + torch.finfo(torch.float32).eps ) )
-            #loss = 
+            
+            diff = x_batch - x_cf
+
+            #L1 regularizer
+            reg_L1 = .5 * torch.mean( torch.sum( torch.abs(torch.squeeze(diff)), dim=1) )
+            #loss += reg
+            loss = loss_classif + reg_L1
 
             #Entropy regularizer
             reg_entro = torch.mean( torch.sum( torch.special.entr(prob_cl), dim=1) )
-            loss = (loss_classif) + reg_entro
+            loss = loss + reg_entro
             
-            #Total Variation Regularizer L1
-            reg_tv = torch.mean( torch.sum( torch.abs( torch.squeeze(to_add[:,:,1:] - to_add[:,:,:-1]) ),dim=1) )
-            loss += reg_tv
-
-            #Total Variation Regularizer L2
-            #reg_tv = torch.mean( torch.sum( torch.square( torch.squeeze(to_add[:,:,1:] - to_add[:,:,:-1]) ),dim=1) )
-            #loss += reg_tv
-
-            #L1 regularizer
-            reg_L1 = torch.mean( torch.sum( torch.abs(torch.squeeze(to_add)), dim=1) )
-            loss += reg_L1
+            #Total Variation Regularizer
+            reg_tv = torch.mean( torch.sum( torch.abs( torch.squeeze(diff[:,:,1:] - diff[:,:,:-1]) ),dim=1) )
+            loss = loss + reg_tv
 
 
             #L2 Regularization
-            reg_L2 = torch.mean( torch.sum( torch.square(torch.squeeze(to_add)), dim=1) )
-            loss += reg_L2
+            #reg_L2 = torch.mean( torch.sum( torch.square(torch.squeeze(to_add)), dim=1) )
+            #loss = loss + reg_L2
             
             #magnitude, _ = torch.max( torch.abs( torch.squeeze(x_cf) - torch.squeeze(x_batch) ), dim=1)
             #reg_sim = torch.mean( magnitude )
@@ -153,44 +139,40 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             loss_d = 0.0
             
             '''
-            #discr.zero_grad()
+            discr.zero_grad()
             real_output = discr( x_batch ).view(-1)
-            fake_output = discr( x_batch + to_add.detach() ).view(-1)
+            #fake_output = discr( x_batch + to_add.detach() ).view(-1)
+            fake_output = discr( x_cf.detach() ).view(-1)
 
-            
+            optimizerD.zero_grad()
             loss_d = discriminator_loss(real_output, fake_output, loss_bce, device)
             loss_d.backward()
             optimizerD.step()
-            #print("=========")
+            
 
-            #optimizer.zero_grad()
+            optimizer.zero_grad()
             fake_output_2 = discr( x_cf )
             fake_output_2 = torch.squeeze(fake_output_2)
             loss_g = generator_loss(fake_output_2, loss_bce, device)
 
-            #loss_g = .5*loss_g 
-            loss += .2*loss_g
+            loss += .5*loss_g
             
             loss.backward()
             optimizer.step()
+
+           
             loss_acc.append( loss.cpu().detach().numpy() )
             #loss_discr.append( 0 )
             loss_discr.append( loss_d.cpu().detach().numpy())
-            
+            loss_reg_L1.append(reg_L1.cpu().detach().numpy() )
             loss_cl.append(loss_classif.cpu().detach().numpy() )
             loss_reg_entro.append(reg_entro.cpu().detach().numpy() )
             loss_reg_tv.append( reg_tv.cpu().detach().numpy())
             #loss_reg_tv.append( 0 )
-            loss_reg_L2.append( reg_L2.cpu().detach().numpy())
-            #loss_reg_L2.append( 0 )
-            #loss_reg_L1.append( 0 )
-            loss_reg_L1.append(reg_L1.cpu().detach().numpy() )
-            loss_generator.append(loss_g.cpu().detach().numpy())
-            #loss_generator.append( 0 )
+            #loss_reg_L2.append( reg_L2.cpu().detach().numpy())
+            loss_reg_L2.append( 0 )
 
-
-
-        print("epoch %d with Gen loss %f (l_GEN %f l_CL %f and reg_L1 %f and l_entro %f and l_TV %f and reg_L2 %f) and Discr Loss %f"%(e, np.mean(loss_acc), np.mean(loss_generator), np.mean(loss_cl), np.mean(loss_reg_L1), np.mean(loss_reg_entro), np.mean(loss_reg_tv), np.mean(loss_reg_L2), np.mean(loss_discr)))
+        print("epoch %d with Gen loss %f (l_CL %f and reg_L1 %f and l_entro %f and l_TV %f and reg_L2 %f) and Discr Loss %f"%(e, np.mean(loss_acc), np.mean(loss_cl), np.mean(loss_reg_L1), np.mean(loss_reg_entro), np.mean(loss_reg_tv), np.mean(loss_reg_L2), np.mean(loss_discr)))
         data, dataCF, pred, orig_label = generateOrigAndAdd(model, noiser, train, device)
         hashOrig2Pred = computeOrig2pred(orig_label, pred)
         for k in hashOrig2Pred.keys():
@@ -200,13 +182,12 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
         sample = np.squeeze( data[idx] )
         sampleCF = np.squeeze( dataCF[idx] )
         ex_cl = orig_label[idx]
-        ex_cfcl = pred[idx]
 
-        
+        #fig = plt.figure()
         plt.clf()
         plt.plot(np.arange(len(sample)), sample,'b')
         plt.plot(np.arange(len(sampleCF)), sampleCF,'r')
-        plt.savefig("epoch_%d_from_cl_%d_2cl_%d.jpg"%(e, ex_cl, ex_cfcl) )
+        plt.savefig("epoch_%d_cl_%d.jpg"%(e, ex_cl) )
         #plt.waitforbuttonpress(0) # this will wait for indefinite time
         #plt.close(fig)
         #exit()
@@ -246,17 +227,20 @@ def extractNDVI(x_train):
     return np.expand_dims(temp_data, 1)
 
 def main(argv):
-    year = 2020#int(argv[1])
+    year = int(argv[1])
 
     x_train = np.load("x_train_%d.npy"%year)
-    x_valid = np.load("x_valid_%d.npy"%year)
+    x_valid = np.load("x_test_%d.npy"%year)
     x_train = np.moveaxis(x_train,(0,1,2),(0,2,1))
     x_valid = np.moveaxis(x_valid,(0,1,2),(0,2,1))
+
+
+    
 
     print(x_train.shape)
     
     y_train = np.load("y_train_%d.npy"%year)-1.
-    y_valid = np.load("y_valid_%d.npy"%year)-1.
+    y_valid = np.load("y_test_%d.npy"%year)-1.
 
     n_classes = len(np.unique(y_train))
 
@@ -287,14 +271,13 @@ def main(argv):
     valid_dataset = TensorDataset(x_valid, y_valid) # create your datset
 
 
-    train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=32)
+    train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=16)
     valid_dataloader = DataLoader(valid_dataset, shuffle=False, batch_size=64)
     #test_dataloader = DataLoader(test_dataset, shuffle=False, batch_size=2048)
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     #model1 = MLPBranch(.5)
-    #model = MLPClassif(n_classes, .5)
-    model = S2Classif(n_classes, dropout_rate = .5)
+    model = MLPClassif(n_classes, .5)
     noiser = Noiser(n_timestamps, .3)
     discr = Discr(.2)
     model.to(device)
@@ -309,9 +292,7 @@ def main(argv):
     loss_ce = nn.CrossEntropyLoss().to(device)
     loss_bce = nn.BCELoss().to(device)
     n_epochs = 1000
-    #file_path = "model_weights"
-    file_path = "model_weights_tempCNN"
-    #file_path = "model_weights"
+    file_path = "model_weights"
     model.load_state_dict(torch.load(file_path))
     for p in model.parameters():
         p.requires_grad = False
