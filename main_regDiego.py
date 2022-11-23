@@ -138,18 +138,19 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             t_avg = torch.sum( weighted, dim=1) / torch.sum(to_add_abs, dim=1)
             diff = (torch.unsqueeze(t_avg,1) - id_temps)            
             uni_reg = .05*torch.mean( torch.sum( torch.square(diff) * to_add_abs, dim=1) )
+            loss+=uni_reg
             
             #Total Variation Regularizer L1
             reg_tv = torch.mean( torch.sum( torch.abs( torch.squeeze(to_add[:,:,1:] - to_add[:,:,:-1]) ),dim=1) )
-            loss += reg_tv
+            loss += 3.*reg_tv
 
             #Total Variation Regularizer L2
             #reg_tv = torch.mean( torch.sum( torch.square( torch.squeeze(to_add[:,:,1:] - to_add[:,:,:-1]) ),dim=1) )
             #loss += reg_tv
 
             #L1 regularizer
-            reg_L1 = torch.mean( torch.sum( torch.abs(torch.squeeze(to_add)), dim=1) )
-            loss += 5.*reg_L1
+            #reg_L1 = torch.mean( torch.sum( torch.abs(torch.squeeze(to_add)), dim=1) )
+            #loss += 5.*reg_L1
 
 
             #L2 Regularization
@@ -193,8 +194,8 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             #loss_reg_tv.append( 0 )
             loss_reg_L2.append( reg_L2.cpu().detach().numpy())
             #loss_reg_L2.append( 0 )
-            #loss_reg_L1.append( 0 )
-            loss_reg_L1.append(reg_L1.cpu().detach().numpy() )
+            loss_reg_L1.append( 0 )
+            #loss_reg_L1.append(reg_L1.cpu().detach().numpy() )
             loss_generator.append(loss_g.cpu().detach().numpy())
             #loss_generator.append( 0 )
             loss_uni.append(uni_reg.cpu().detach().numpy())
