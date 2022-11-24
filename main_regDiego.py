@@ -128,7 +128,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
 
             #Entropy regularizer
             reg_entro = torch.mean( torch.sum( torch.special.entr(prob_cl), dim=1) )
-            loss = 2.*loss_classif #+ reg_entro
+            
             
             #loss+= reg_entro
             #Unimodal Regularizer
@@ -136,12 +136,12 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             weighted = to_add_abs * id_temps
             t_avg = torch.sum( weighted, dim=1) / torch.sum(to_add_abs, dim=1)
             diff = (torch.unsqueeze(t_avg,1) - id_temps)            
-            uni_reg = .3*torch.mean( torch.sum( torch.square(diff) * to_add_abs, dim=1) )
-            loss+=uni_reg
+            uni_reg = torch.mean( torch.sum( torch.square(diff) * to_add_abs, dim=1) )
+            
             
             #Total Variation Regularizer L1
             reg_tv = torch.mean( torch.sum( torch.abs( torch.squeeze(to_add[:,:,1:] - to_add[:,:,:-1]) ),dim=1) )
-            loss += 1.*reg_tv
+            
 
             #Total Variation Regularizer L2
             #reg_tv = torch.mean( torch.sum( torch.square( torch.squeeze(to_add[:,:,1:] - to_add[:,:,:-1]) ),dim=1) )
@@ -156,7 +156,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
 
             #L2 Regularization
             reg_L2 = torch.mean( torch.sum( torch.square(torch.squeeze(to_add)), dim=1) )
-            loss += 1.5*reg_L2
+            #loss += 
             
             #magnitude, _ = torch.max( torch.abs( torch.squeeze(x_cf) - torch.squeeze(x_batch) ), dim=1)
             #reg_sim = torch.mean( magnitude )
@@ -182,10 +182,15 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
 
 
             #loss_g = .5*loss_g 
-            loss += .5*loss_g
             
+            
+            loss = loss_classif + .1*uni_reg + .3*reg_L2 + .3*reg_tv + .3*loss_g
+
+
             loss.backward()
             optimizer.step()
+
+
             loss_acc.append( loss.cpu().detach().numpy() )
             #loss_discr.append( 0 )
             loss_discr.append( loss_d.cpu().detach().numpy())
@@ -215,14 +220,17 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
         '''
         cm = confusion_matrix(pred, pred_cf)
         print(cm)
+
+        number_of_changes = len( np.where(pred != pred_cf)[0] )
+        print("NUMER OF CHANGED PREDICTION : %d over %d"%(number_of_changes, pred.shape[0]))
         
         idx_list = np.where(pred != pred_cf)[0]
         idx_list = shuffle(idx_list)
         idx = idx_list[0]
         sample = np.squeeze( data[idx] )
         sampleCF = np.squeeze( dataCF[idx] )
-        ex_cl = orig_label[idx]
-        ex_cfcl = pred[idx]
+        ex_cl = pred[idx]
+        ex_cfcl = pred_cf[idx]
 
         
         plt.clf()
