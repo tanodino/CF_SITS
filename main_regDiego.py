@@ -130,7 +130,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
 
             #Entropy regularizer
             reg_entro = torch.mean( torch.sum( torch.special.entr(prob_cl), dim=1) )
-            loss = loss_classif #+ reg_entro
+            loss = 2.*loss_classif #+ reg_entro
             
             #loss+= reg_entro
             #Unimodal Regularizer
@@ -213,7 +213,10 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
         for k in hashOrig2Pred.keys():
             print("\t ",k," -> ",hashOrig2Pred[k])
         print("========")
-        idx = np.random.randint(low=0, high=data.shape[0],size=1)
+
+        idx_list = np.where(pred != orig_label)[0]
+        idx_list = shuffle(idx_list)
+        idx = idx_list[0]
         sample = np.squeeze( data[idx] )
         sampleCF = np.squeeze( dataCF[idx] )
         ex_cl = orig_label[idx]

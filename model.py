@@ -65,8 +65,8 @@ class S2Branch(nn.Module):
 
 class BinaryClassif(nn.Module):
     def __init__(self, dropout_rate = 0.0, hidden_activation='relu', output_activation='softmax',
-                 name='Classif',**kwargs):
-        super(Classif, self).__init__(**kwargs)
+                 name='BinaryClassif',**kwargs):
+        super(BinaryClassif, self).__init__(**kwargs)
         self.fc1 = nn.LazyLinear(256)
         self.bn1 = nn.BatchNorm1d(256)
         self.relu1 = nn.ReLU()
@@ -85,9 +85,9 @@ class BinaryClassif(nn.Module):
 
 class Discr(nn.Module):
     def __init__(self, n_class, dropout_rate = 0.0, hidden_activation='relu', output_activation='softmax',
-                 name='S2Classif',
+                 name='Discr',
                  **kwargs):
-        super(S2Classif, self).__init__(**kwargs)
+        super(Discr, self).__init__(**kwargs)
         self.encoder = S2Branch(dropout_rate)
         self.HeadBCl = BinaryClassif(dropout_rate=dropout_rate)
 
