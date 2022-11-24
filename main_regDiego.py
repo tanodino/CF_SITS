@@ -138,12 +138,12 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             weighted = to_add_abs * id_temps
             t_avg = torch.sum( weighted, dim=1) / torch.sum(to_add_abs, dim=1)
             diff = (torch.unsqueeze(t_avg,1) - id_temps)            
-            uni_reg = .1*torch.mean( torch.sum( torch.square(diff) * to_add_abs, dim=1) )
+            uni_reg = .3*torch.mean( torch.sum( torch.square(diff) * to_add_abs, dim=1) )
             loss+=uni_reg
             
             #Total Variation Regularizer L1
             reg_tv = torch.mean( torch.sum( torch.abs( torch.squeeze(to_add[:,:,1:] - to_add[:,:,:-1]) ),dim=1) )
-            loss += 3.*reg_tv
+            loss += 1.*reg_tv
 
             #Total Variation Regularizer L2
             #reg_tv = torch.mean( torch.sum( torch.square( torch.squeeze(to_add[:,:,1:] - to_add[:,:,:-1]) ),dim=1) )
@@ -158,7 +158,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
 
             #L2 Regularization
             reg_L2 = torch.mean( torch.sum( torch.square(torch.squeeze(to_add)), dim=1) )
-            loss += 5.*reg_L2
+            loss += 1.5*reg_L2
             
             #magnitude, _ = torch.max( torch.abs( torch.squeeze(x_cf) - torch.squeeze(x_batch) ), dim=1)
             #reg_sim = torch.mean( magnitude )
@@ -184,7 +184,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
 
 
             #loss_g = .5*loss_g 
-            loss += loss_g
+            loss += .5*loss_g
             
             loss.backward()
             optimizer.step()
