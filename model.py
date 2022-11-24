@@ -61,6 +61,43 @@ class S2Branch(nn.Module):
         #print("output.shape ",output.shape)
         #return output
 
+
+
+class BinaryClassif(nn.Module):
+    def __init__(self, dropout_rate = 0.0, hidden_activation='relu', output_activation='softmax',
+                 name='Classif',**kwargs):
+        super(Classif, self).__init__(**kwargs)
+        self.fc1 = nn.LazyLinear(256)
+        self.bn1 = nn.BatchNorm1d(256)
+        self.relu1 = nn.ReLU()
+        self.drop1 = nn.Dropout(dropout_rate)
+        self.cl = nn.LazyLinear(1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, inputs):
+        
+        output = self.fc1(inputs)
+        output = self.bn1(output)
+        output = self.relu1(output)
+        output = self.drop1(output)
+        output = self.cl(output)
+        return self.sigmoid(output)
+
+class Discr(nn.Module):
+    def __init__(self, n_class, dropout_rate = 0.0, hidden_activation='relu', output_activation='softmax',
+                 name='S2Classif',
+                 **kwargs):
+        super(S2Classif, self).__init__(**kwargs)
+        self.encoder = S2Branch(dropout_rate)
+        self.HeadBCl = BinaryClassif(dropout_rate=dropout_rate)
+
+    def forward(self, inputs):
+        output = self.encoder(inputs)
+        return self.HeadBCl(output)
+
+
+
+'''
 class Discr(nn.Module):
     def __init__(self, dim, dropout_rate = 0.0, name='Discr', **kwargs):
         super(Discr, self).__init__(**kwargs)
@@ -80,6 +117,8 @@ class Discr(nn.Module):
         output = self.dp1(output)
         output = self.dense2(output)
         return self.sigmoid(output)
+'''
+
 
 
 

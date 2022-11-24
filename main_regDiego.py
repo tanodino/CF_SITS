@@ -130,14 +130,15 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
 
             #Entropy regularizer
             reg_entro = torch.mean( torch.sum( torch.special.entr(prob_cl), dim=1) )
-            loss = (loss_classif) + reg_entro
-
+            loss = loss_classif #+ reg_entro
+            
+            #loss+= reg_entro
             #Unimodal Regularizer
             to_add_abs = torch.abs(np.squeeze(to_add) )
             weighted = to_add_abs * id_temps
             t_avg = torch.sum( weighted, dim=1) / torch.sum(to_add_abs, dim=1)
             diff = (torch.unsqueeze(t_avg,1) - id_temps)            
-            uni_reg = .05*torch.mean( torch.sum( torch.square(diff) * to_add_abs, dim=1) )
+            uni_reg = .1*torch.mean( torch.sum( torch.square(diff) * to_add_abs, dim=1) )
             loss+=uni_reg
             
             #Total Variation Regularizer L1
@@ -147,6 +148,8 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             #Total Variation Regularizer L2
             #reg_tv = torch.mean( torch.sum( torch.square( torch.squeeze(to_add[:,:,1:] - to_add[:,:,:-1]) ),dim=1) )
             #loss += reg_tv
+
+
 
             #L1 regularizer
             #reg_L1 = torch.mean( torch.sum( torch.abs(torch.squeeze(to_add)), dim=1) )
@@ -179,8 +182,9 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             fake_output_2 = torch.squeeze(fake_output_2)
             loss_g = generator_loss(fake_output_2, loss_bce, device)
 
+
             #loss_g = .5*loss_g 
-            loss += .2*loss_g
+            loss += loss_g
             
             loss.backward()
             optimizer.step()
@@ -189,7 +193,8 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             loss_discr.append( loss_d.cpu().detach().numpy())
             
             loss_cl.append(loss_classif.cpu().detach().numpy() )
-            loss_reg_entro.append(reg_entro.cpu().detach().numpy() )
+            loss_reg_entro.append(0)
+            #loss_reg_entro.append(reg_entro.cpu().detach().numpy() )
             loss_reg_tv.append( reg_tv.cpu().detach().numpy())
             #loss_reg_tv.append( 0 )
             loss_reg_L2.append( reg_L2.cpu().detach().numpy())
