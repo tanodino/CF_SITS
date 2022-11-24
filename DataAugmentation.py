@@ -95,7 +95,7 @@ def main(argv):
     #file_path = "model_weights_tempCNN"
     #model.load_state_dict(torch.load(file_path))
 
-    path_file_noiser = "noiser_weights"
+    path_file_noiser = "noiser_weights_UNI"
     noiser.load_state_dict(torch.load(path_file_noiser))
 
     dataCF = predictionAndCF(noiser, train_dataloader, device)

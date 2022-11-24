@@ -11,6 +11,7 @@ import time
 from sklearn.manifold import TSNE
 
 from torch.utils.data import TensorDataset, DataLoader
+from sklearn.metrics import confusion_matrix
 
 import time
 import torch.nn.functional as F
@@ -62,6 +63,7 @@ def prediction(model, valid, device):
 def generateOrigAndAdd(model, noiser, train, device):
     data = []
     dataCF = []
+    prediction_cf = []
     prediction = []
     orig_label = []
     model.eval()
@@ -69,12 +71,14 @@ def generateOrigAndAdd(model, noiser, train, device):
     for x_batch, y_batch in train:
         x_batch = x_batch.to(device)
         to_add = noiser(x_batch)
-        pred = model(x_batch+to_add)
+        pred_cf = model(x_batch+to_add)
+        pred = model(x_batch)
         data.append(x_batch.cpu().detach().numpy())
         dataCF.append(x_batch.cpu().detach().numpy()+ to_add.cpu().detach().numpy())
+        prediction_cf.append( np.argmax( pred_cf.cpu().detach().numpy(),axis=1) )
         prediction.append( np.argmax( pred.cpu().detach().numpy(),axis=1) )
         orig_label.append( y_batch.cpu().detach().numpy() )
-    return np.concatenate(data,axis=0), np.concatenate(dataCF,axis=0), np.concatenate(prediction,axis=0), np.concatenate(orig_label,axis=0)
+    return np.concatenate(data,axis=0), np.concatenate(dataCF,axis=0), np.concatenate(prediction,axis=0), np.concatenate(prediction_cf,axis=0), np.concatenate(orig_label,axis=0)
 
 def computeOrig2pred(orig_label, pred):
     classes = np.unique(orig_label)
@@ -115,12 +119,6 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
  
             x_cf = x_batch+to_add
             pred_cl = model(x_cf)
-
-            '''
-            print("x_batch ",x_batch)
-            print("to_add ", to_add)
-            print("x_cf ", x_cf)
-            '''
 
             prob_cl = torch.nn.functional.softmax(pred_cl,dim=1)
             y_ohe = F.one_hot(y_batch.long(), num_classes=n_classes)
@@ -208,13 +206,17 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
 
 
         print("epoch %d with Gen loss %f (l_GEN %f l_CL %f and reg_L1 %f and l_entro %f and l_TV %f and reg_L2 %f and reg_UNI %f) and Discr Loss %f"%(e, np.mean(loss_acc), np.mean(loss_generator), np.mean(loss_cl), np.mean(loss_reg_L1), np.mean(loss_reg_entro), np.mean(loss_reg_tv), np.mean(loss_reg_L2), np.mean(loss_uni), np.mean(loss_discr)))
-        data, dataCF, pred, orig_label = generateOrigAndAdd(model, noiser, train, device)
+        data, dataCF, pred, pred_cf, orig_label = generateOrigAndAdd(model, noiser, train, device)
+        '''
         hashOrig2Pred = computeOrig2pred(orig_label, pred)
         for k in hashOrig2Pred.keys():
             print("\t ",k," -> ",hashOrig2Pred[k])
         print("========")
-
-        idx_list = np.where(pred != orig_label)[0]
+        '''
+        cm = confusion_matrix(pred, pred_cf)
+        print(cm)
+        
+        idx_list = np.where(pred != pred_cf)[0]
         idx_list = shuffle(idx_list)
         idx = idx_list[0]
         sample = np.squeeze( data[idx] )

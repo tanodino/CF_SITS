@@ -108,12 +108,9 @@ def extractNDVI(x_train):
 
 def main(argv):
     year = 2020
-
     x_train = np.load("x_train_%d.npy"%year)
     x_train = np.moveaxis(x_train,(0,1,2),(0,2,1))
-    
     y_train = np.load("y_train_%d.npy"%year)-1.
-
     n_classes = len(np.unique(y_train))
 
     x_train = extractNDVI(x_train)
@@ -156,7 +153,7 @@ def main(argv):
         for sink_k in avgProfileHash[source_k].keys():
             writeImage(source_k, sink_k, avgProfileHash[source_k][sink_k], stdProfileHash[source_k][sink_k], output_folder)
 
-
+    '''
     exit()
     
     
@@ -182,6 +179,6 @@ def main(argv):
             print("%d out of %d"%(i,len(pred)))
             saveFig(i, pred[i], pred_CF[i], x_test[i], dataCF[i], out_path)
             #exit()
-
+    '''
 if __name__ == "__main__":
    main(sys.argv)
