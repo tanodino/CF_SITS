@@ -1,4 +1,4 @@
-# KOUMBIA
+#KOUMBIA
 import numpy as np
 #import tensorflow as tf
 import torch
@@ -13,7 +13,6 @@ from sklearn.manifold import TSNE
 from torch.utils.data import TensorDataset, DataLoader
 import chord
 from chord import Chord
-from mpl_chord_diagram import chord_diagram
 from sklearn.metrics import confusion_matrix
 
 
@@ -23,15 +22,15 @@ import matplotlib.pyplot as plt
 
 from model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
 
-
-def writeImage(source_k, sink_k, avgProfile, stdProfile, output_folder):
-    output_name = output_folder+"/cl%d_moved2_cl%d.png" % (source_k, sink_k)
+def writeImage(source_k, sink_k, avgProfile, stdProfile, output_folder):    
+    output_name = output_folder+"/cl%d_moved2_cl%d.png"%(source_k, sink_k)
     plt.clf()
-    x_axis = np.arange(len(avgProfile))
-    plt.plot(x_axis, avgProfile, 'k', color='#CC4F1B')
-    plt.fill_between(x_axis, avgProfile-stdProfile, avgProfile +
-                     stdProfile, alpha=0.5, edgecolor='#CC4F1B', facecolor='#FF9848')
-    plt.savefig(output_name)
+    x_axis= np.arange(len(avgProfile))
+    plt.xlim([0, len(avgProfile)-1])
+    plt.plot(x_axis, avgProfile, color='#CC4F1B')
+    plt.plot(x_axis, np.zeros(len(x_axis)), color='#000000')
+    plt.fill_between(x_axis, avgProfile-stdProfile, avgProfile+stdProfile, alpha=0.5, edgecolor='#CC4F1B', facecolor='#FF9848')
+    plt.savefig(output_name )
 
 
 def extractProfile(pred, pred_CF, noiseCF):
@@ -45,39 +44,36 @@ def extractProfile(pred, pred_CF, noiseCF):
                 hash_source_sink_avg[source_id] = {}
             if sink_id not in hash_source_sink_avg[source_id].keys():
                 hash_source_sink_avg[source_id][sink_id] = []
-            hash_source_sink_avg[source_id][sink_id].append(noiseCF[v])
-
+            hash_source_sink_avg[source_id][sink_id].append( noiseCF[v] )
+    
     for source_id in hash_source_sink_avg.keys():
         for sink_id in hash_source_sink_avg[source_id].keys():
             temp = hash_source_sink_avg[source_id][sink_id]
             temp = np.array(temp)
-            hash_source_sink_avg[source_id][sink_id] = np.mean(
-                np.array(temp), axis=0)
+            hash_source_sink_avg[source_id][sink_id] = np.mean(np.array(temp),axis=0)
             if source_id not in hash_source_sink_std.keys():
                 hash_source_sink_std[source_id] = {}
-            # if sink_id not in hash_source_sink_std[source_id].keys():
-            hash_source_sink_std[source_id][sink_id] = np.std(
-                np.array(temp), axis=0)
+            hash_source_sink_std[source_id][sink_id] = np.std(np.array(temp),axis=0)
+                
+    return hash_source_sink_avg, hash_source_sink_std   
 
-    return hash_source_sink_avg, hash_source_sink_std
 
 
 def saveFig(i, pred, pred_cf, sample, sampleCF, out_path):
     plt.clf()
-    x_axis = np.arange(len(sample))
-    plt.plot(x_axis, sample, 'b')
-    plt.plot(x_axis, sampleCF, 'r')
-    plt.savefig(out_path+"/sample_%d_from_cl_%d_2cl_%d.jpg" %
-                (i, pred, pred_cf))
+    x_axis= np.arange(len(sample))
+    plt.plot(x_axis, sample,'b')
+    plt.plot(x_axis, sampleCF,'r')
+    plt.savefig(out_path+"/sample_%d_from_cl_%d_2cl_%d.jpg"%(i, pred, pred_cf) )
 
 
 def computeOrig2pred(orig_label, pred):
     classes = np.unique(orig_label)
-    n_classes = len(classes)
+    n_classes = len( classes )
     hashOrig2Pred = {}
     for v in classes:
         idx = np.where(orig_label == v)[0]
-        hashOrig2Pred[v] = np.bincount(pred[idx], minlength=n_classes)
+        hashOrig2Pred[v] = np.bincount( pred[idx], minlength=n_classes )
     return hashOrig2Pred
 
 
@@ -95,62 +91,59 @@ def predictionAndCF(model, noiser, data, device):
         pred = model(x)
         to_add = noiser(x)
         pred_cf = model(x+to_add)
-        dataCF.append((x+to_add).cpu().detach().numpy())
-        pred_tot.append(np.argmax(pred.cpu().detach().numpy(), axis=1))
-        pred_CF.append(np.argmax(pred_cf.cpu().detach().numpy(), axis=1))
-        noise_CF.append(np.squeeze(to_add.cpu().detach().numpy()))
+        dataCF.append( (x+to_add).cpu().detach().numpy() )
+        pred_tot.append( np.argmax( pred.cpu().detach().numpy() ,axis=1) )
+        pred_CF.append( np.argmax( pred_cf.cpu().detach().numpy() ,axis=1) )
+        noise_CF.append( np.squeeze( to_add.cpu().detach().numpy() ) )
     pred_tot = np.concatenate(pred_tot, axis=0)
     pred_CF = np.concatenate(pred_CF, axis=0)
-    return pred_tot, pred_CF, np.concatenate(dataCF, axis=0), np.concatenate(noise_CF, axis=0)
-
+    return pred_tot, pred_CF, np.concatenate(dataCF,axis=0), np.concatenate(noise_CF,axis=0)
 
 def extractNDVI(x_train):
     eps = np.finfo(np.float32).eps
-    red = x_train[:, 2, :]
-    nir = x_train[:, 3, :]
-    temp_data = (nir - red) / ((nir + red) + eps)
+    red = x_train[:,2,:]
+    nir = x_train[:,3,:]
+    temp_data = (nir - red ) / ( (nir + red) + eps )
     return np.expand_dims(temp_data, 1)
 
-
 def main(argv):
-    year = 2020  # int(argv[1])
+    year = 2020
 
-    x_train = np.load("x_train_%d.npy" % year)
-    x_train = np.moveaxis(x_train, (0, 1, 2), (0, 2, 1))
-
-    y_train = np.load("y_train_%d.npy" % year)-1.
+    x_train = np.load("x_train_%d.npy"%year)
+    x_train = np.moveaxis(x_train,(0,1,2),(0,2,1))
+    
+    y_train = np.load("y_train_%d.npy"%year)-1.
 
     n_classes = len(np.unique(y_train))
 
     x_train = extractNDVI(x_train)
 
     n_timestamps = x_train.shape[-1]
+    
+    x_train_pytorch = torch.Tensor(x_train) # transform to torch tensor
+    
+    train_dataset = TensorDataset(x_train_pytorch) # create your datset
 
-    x_train_pytorch = torch.Tensor(x_train)  # transform to torch tensor
-
-    train_dataset = TensorDataset(x_train_pytorch)  # create your datset
-
-    train_dataloader = DataLoader(
-        train_dataset, shuffle=False, batch_size=2048)
+    train_dataloader = DataLoader(train_dataset, shuffle=False, batch_size=2048)    
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = S2Classif(n_classes, dropout_rate=.5)
+    model = S2Classif(n_classes, dropout_rate = .5)
     noiser = Noiser(n_timestamps, .3)
     model.to(device)
     noiser.to(device)
-
+    
     file_path = "model_weights_tempCNN"
     model.load_state_dict(torch.load(file_path))
 
-    path_file_noiser = "noiser_weights"
+    #path_file_noiser = "noiser_weights"
+    path_file_noiser = "noiser_weights_UNI"
     noiser.load_state_dict(torch.load(path_file_noiser))
 
-    pred, pred_CF, dataCF, noiseCF = predictionAndCF(
-        model, noiser, train_dataloader, device)
-
+    pred, pred_CF, dataCF, noiseCF = predictionAndCF(model, noiser, train_dataloader, device)
+    
     cm = confusion_matrix(pred, pred_CF)
     print("[")
     for row in cm:
-        row_str = ",".join([str(el) for el in row])
+        row_str = ",".join( [str(el) for el in row] )
         print("["+row_str+"],")
     print("]")
 
@@ -161,22 +154,14 @@ def main(argv):
     avgProfileHash, stdProfileHash = extractProfile(pred, pred_CF, noiseCF)
     for source_k in avgProfileHash.keys():
         for sink_k in avgProfileHash[source_k].keys():
-            writeImage(source_k, sink_k, avgProfileHash[source_k]
-                       [sink_k], stdProfileHash[source_k][sink_k], output_folder)
+            writeImage(source_k, sink_k, avgProfileHash[source_k][sink_k], stdProfileHash[source_k][sink_k], output_folder)
 
-    # Directed Chord graph: see https://codeberg.org/tfardet/mpl_chord_diagram
-    names = ["CEREALS", "COTTON", "OLEAGINOUS", "GRASSLAND", "SHRUBLAND",
-             "FOREST", "U.", "W."]  # "BUILT-UP", "WATER"
-    colors = ["#dead0a", "#cfbc8d", "#867025", "#69ef73", "#21a52b",
-              "#02650a", "#333435", "#0a5ade"]
-    chord_diagram(cm, names, gap=0.05, sort="distance", directed=True,
-                  colors=colors, chordwidth=0.5)
-    plt.savefig("chord_graph_training.pdf", format="pdf", bbox_inches="tight")
-    #Chord(cm, names).to_html("chord-diagram-chord-library.html")
+
     exit()
-
+    
+    
+    
     idx = np.where(pred == y_test)[0]
-
     pred = pred[idx]
     pred_CF = pred_CF[idx]
     dataCF = dataCF[idx]
@@ -184,9 +169,7 @@ def main(argv):
 
     hashOrig2Pred = computeOrig2pred(pred, pred_CF)
     for k in hashOrig2Pred.keys():
-        print("\t ", k, " -> ", hashOrig2Pred[k])
-    print("========")
-    exit()
+        print("\t ",k," -> ",hashOrig2Pred[k])
     out_path = "CF"
     if not os.path.exists(out_path):
         os.makedirs(out_path)
@@ -196,10 +179,9 @@ def main(argv):
 
     for i in range(len(pred)):
         if pred[i] != pred_CF[i]:
-            print("%d out of %d" % (i, len(pred)))
+            print("%d out of %d"%(i,len(pred)))
             saveFig(i, pred[i], pred_CF[i], x_test[i], dataCF[i], out_path)
-            # exit()
-
+            #exit()
 
 if __name__ == "__main__":
-    main(sys.argv)
+   main(sys.argv)
