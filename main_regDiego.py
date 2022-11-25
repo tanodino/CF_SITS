@@ -175,6 +175,8 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             optimizerD.step()
             #print("=========")
 
+
+
             #optimizer.zero_grad()
             fake_output_2 = discr( x_cf )
             fake_output_2 = torch.squeeze(fake_output_2)
@@ -183,10 +185,9 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
 
             #loss_g = .5*loss_g 
             
-            
-            loss = loss_classif + .1*uni_reg + .3*reg_L2 + .3*reg_tv + .3*loss_g
+            #loss = 4*loss_classif + .1*uni_reg + .01*reg_L2 + .01*reg_tv + loss_g
 
-
+            loss = loss_classif + loss_g + .005*uni_reg #+ .05*reg_L2 + .05*reg_tv
             loss.backward()
             optimizer.step()
 
@@ -202,16 +203,16 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             #loss_reg_tv.append( 0 )
             loss_reg_L2.append( reg_L2.cpu().detach().numpy())
             #loss_reg_L2.append( 0 )
-            loss_reg_L1.append( 0 )
-            #loss_reg_L1.append(reg_L1.cpu().detach().numpy() )
             loss_generator.append(loss_g.cpu().detach().numpy())
             #loss_generator.append( 0 )
             loss_uni.append(uni_reg.cpu().detach().numpy())
 
 
 
-        print("epoch %d with Gen loss %f (l_GEN %f l_CL %f and reg_L1 %f and l_entro %f and l_TV %f and reg_L2 %f and reg_UNI %f) and Discr Loss %f"%(e, np.mean(loss_acc), np.mean(loss_generator), np.mean(loss_cl), np.mean(loss_reg_L1), np.mean(loss_reg_entro), np.mean(loss_reg_tv), np.mean(loss_reg_L2), np.mean(loss_uni), np.mean(loss_discr)))
+        print("epoch %d with Gen loss %f (l_GEN %f l_CL %f and and l_entro %f and l_TV %f and reg_L2 %f and reg_UNI %f) and Discr Loss %f"%(e, np.mean(loss_acc), np.mean(loss_generator), np.mean(loss_cl), np.mean(loss_reg_entro), np.mean(loss_reg_tv), np.mean(loss_reg_L2), np.mean(loss_uni), np.mean(loss_discr)))
         data, dataCF, pred, pred_cf, orig_label = generateOrigAndAdd(model, noiser, train, device)
+        #print("F1 SCORE original model %f"%f1_score(orig_label, pred,average="weighted"))
+        #exit()
         '''
         hashOrig2Pred = computeOrig2pred(orig_label, pred)
         for k in hashOrig2Pred.keys():
@@ -338,7 +339,7 @@ def main(argv):
     
     loss_ce = nn.CrossEntropyLoss().to(device)
     loss_bce = nn.BCELoss().to(device)
-    n_epochs = 1000
+    n_epochs = 100
     #file_path = "model_weights"
     file_path = "model_weights_tempCNN"
     #file_path = "model_weights"
