@@ -128,13 +128,15 @@ class Noiser(nn.Module):
                  **kwargs):
         super(Noiser, self).__init__(**kwargs)
         self.dense1 = nn.LazyLinear(128)
-        #self.bn1 = nn.BatchNorm1d(128)
-        self.tanh1 = nn.Tanh()#nn.ReLU()
+        self.bn1 = nn.BatchNorm1d(128)
+        #self.tanh1 = nn.Tanh()#nn.ReLU()
+        self.tanh1 = nn.ReLU()
         self.dp1 = nn.Dropout(dropout_rate)
 
         self.dense2 = nn.LazyLinear(128)
-        #self.bn2 = nn.BatchNorm1d(128)
-        self.tanh2 = nn.Tanh()#nn.ReLU()
+        self.bn2 = nn.BatchNorm1d(128)
+        #self.tanh2 = nn.Tanh()#nn.ReLU()
+        self.tanh2 = nn.ReLU()
         self.dp2 = nn.Dropout(dropout_rate)
 
         self.dense3 = nn.LazyLinear(dim)
@@ -144,12 +146,12 @@ class Noiser(nn.Module):
         output = torch.squeeze(inputs)
         
         output = self.dense1(output)
-        #output = self.bn1(output)
+        output = self.bn1(output)
         output = self.tanh1(output)
         output = self.dp1(output)
         
         output = self.dense2(output)
-        #output = self.bn2(output)
+        output = self.bn2(output)
         output = self.tanh2(output)
         output = self.dp2(output)
         

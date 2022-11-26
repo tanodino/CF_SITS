@@ -129,14 +129,16 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             #Entropy regularizer
             reg_entro = torch.mean( torch.sum( torch.special.entr(prob_cl), dim=1) )
             
-            
-            #loss+= reg_entro
+
             #Unimodal Regularizer
             to_add_abs = torch.abs(np.squeeze(to_add) )
-            weighted = to_add_abs * id_temps
-            t_avg = torch.sum( weighted, dim=1) / torch.sum(to_add_abs, dim=1)
+            #weighted = to_add_abs * id_temps
+            #t_avg = torch.sum( weighted, dim=1) / torch.sum(to_add_abs, dim=1)
+            _, t_avg = torch.max(to_add_abs,dim=1)
             diff = (torch.unsqueeze(t_avg,1) - id_temps)            
             uni_reg = torch.mean( torch.sum( torch.square(diff) * to_add_abs, dim=1) )
+            #uni_reg = torch.mean( torch.sum( to_add_abs, dim=1) )
+            #uni_reg = torch.mean( torch.sum( torch.abs(diff) * to_add_abs, dim=1) )
             
             
             #Total Variation Regularizer L1
@@ -187,7 +189,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             
             #loss = 4*loss_classif + .1*uni_reg + .01*reg_L2 + .01*reg_tv + loss_g
 
-            loss = loss_classif + loss_g + .005*uni_reg #+ .05*reg_L2 + .05*reg_tv
+            loss = 3.*loss_classif + loss_g + .2*uni_reg #+ .05*reg_L2 + .05*reg_tv
             loss.backward()
             optimizer.step()
 
@@ -219,11 +221,14 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             print("\t ",k," -> ",hashOrig2Pred[k])
         print("========")
         '''
-        cm = confusion_matrix(pred, pred_cf)
+        subset_idx = np.where(pred == orig_label)[0]
+
+
+        cm = confusion_matrix(pred[subset_idx], pred_cf[subset_idx])
         print(cm)
 
-        number_of_changes = len( np.where(pred != pred_cf)[0] )
-        print("NUMER OF CHANGED PREDICTION : %d over %d"%(number_of_changes, pred.shape[0]))
+        number_of_changes = len( np.where(pred[subset_idx] != pred_cf[subset_idx])[0] )
+        print("NUMER OF CHANGED PREDICTION : %d over %d, original size is %d"%(number_of_changes, pred[subset_idx].shape[0], pred.shape[0]))
         
         idx_list = np.where(pred != pred_cf)[0]
         idx_list = shuffle(idx_list)
@@ -318,7 +323,7 @@ def main(argv):
     valid_dataset = TensorDataset(x_valid, y_valid) # create your datset
 
 
-    train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=32)
+    train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=128)
     valid_dataloader = DataLoader(valid_dataset, shuffle=False, batch_size=64)
     #test_dataloader = DataLoader(test_dataset, shuffle=False, batch_size=2048)
     
@@ -339,7 +344,7 @@ def main(argv):
     
     loss_ce = nn.CrossEntropyLoss().to(device)
     loss_bce = nn.BCELoss().to(device)
-    n_epochs = 100
+    n_epochs = 150
     #file_path = "model_weights"
     file_path = "model_weights_tempCNN"
     #file_path = "model_weights"
