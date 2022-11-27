@@ -106,6 +106,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
         loss_reg_tv = []
         loss_generator = []
         loss_uni = []
+        t_avg_all = []
 
         for x_batch, y_batch in train:
             noiser.zero_grad()
@@ -131,15 +132,42 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             
 
             #Unimodal Regularizer
+            # Compute central time
             to_add_abs = torch.abs(np.squeeze(to_add) )
+            #1) center of mass
             #weighted = to_add_abs * id_temps
             #t_avg = torch.sum( weighted, dim=1) / torch.sum(to_add_abs, dim=1)
+            #2) max absolute value
             _, t_avg = torch.max(to_add_abs,dim=1)
-            diff = (torch.unsqueeze(t_avg,1) - id_temps)            
+            #3) convolution (possibly circular)
+            #to_add_abs = torch.abs(to_add)
+            #sigma, w = 1, 5
+            #filter = torch.exp( - (torch.arange(-w,w+1,dtype=torch.float, device=device))**2 / (2*sigma ** 2))
+            #filter /= filter.sum()
+            #filter = filter[None].expand(1, -1, -1)
+            #conv = F.conv1d(F.pad(to_add_abs, (w,w), "circular"), filter)
+            #t_avg = conv.argmax(-1).float()
+
+
+            # Compute distance to t_avg
+            #1) linear
+            diff = (torch.unsqueeze(t_avg,1) - id_temps)
+            #2) circular
+            #t_avg = torch.unsqueeze(t_avg, 1)
+            #diff = torch.minimum(torch.remainder(t_avg - id_temps, n_timestamps),
+            #                     torch.remainder(id_temps - t_avg, n_timestamps))
+
+
             uni_reg = torch.mean( torch.sum( torch.square(diff) * to_add_abs, dim=1) )
             #uni_reg = torch.mean( torch.sum( to_add_abs, dim=1) )
             #uni_reg = torch.mean( torch.sum( torch.abs(diff) * to_add_abs, dim=1) )
-            
+
+            #Multimodal Group Regularizer
+            #regulariser = 0
+            #for k in range(1,n_timestamps+1):
+            #    weight = torch.pow(0.5, torch.flip(torch.arange(k),[0])).to(device).expand_as(to_add[...,:k])
+            #    regulariser += (torch.norm(weight*to_add[...,:k]) + torch.norm(weight*to_add[...,-k:]))
+            #multi_reg = torch.mean( torch.sum(regulariser))
             
             #Total Variation Regularizer L1
             reg_tv = torch.mean( torch.sum( torch.abs( torch.squeeze(to_add[:,:,1:] - to_add[:,:,:-1]) ),dim=1) )
@@ -208,6 +236,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             loss_generator.append(loss_g.cpu().detach().numpy())
             #loss_generator.append( 0 )
             loss_uni.append(uni_reg.cpu().detach().numpy())
+            t_avg_all.append(t_avg.cpu().detach().numpy())
 
 
 
@@ -238,7 +267,12 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
         ex_cl = pred[idx]
         ex_cfcl = pred_cf[idx]
 
-        
+        #Central time histogram
+        #plt.clf()
+        #t_avg_all = np.concatenate(t_avg_all,axis=0)
+        #plt.hist(t_avg_all.squeeze(), bins=np.concatenate(([-.5],np.arange(n_timestamps))))
+        #plt.savefig("epoch_%d_t_avg_hist.jpg"%(e) )
+
         plt.clf()
         plt.plot(np.arange(len(sample)), sample,'b')
         plt.plot(np.arange(len(sampleCF)), sampleCF,'r')
