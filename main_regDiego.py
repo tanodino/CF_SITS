@@ -148,7 +148,6 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             #conv = F.conv1d(F.pad(to_add_abs, (w,w), "circular"), filter)
             #t_avg = conv.argmax(-1).float()
 
-
             # Compute distance to t_avg
             #1) linear
             diff = (torch.unsqueeze(t_avg,1) - id_temps)
@@ -157,17 +156,28 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             #diff = torch.minimum(torch.remainder(t_avg - id_temps, n_timestamps),
             #                     torch.remainder(id_temps - t_avg, n_timestamps))
 
-
             uni_reg = torch.mean( torch.sum( torch.square(diff) * to_add_abs, dim=1) )
             #uni_reg = torch.mean( torch.sum( to_add_abs, dim=1) )
             #uni_reg = torch.mean( torch.sum( torch.abs(diff) * to_add_abs, dim=1) )
 
-            #Multimodal Group Regularizer
+
+
+            #Multimodal Regularizer
+            #1) Group reg
             #regulariser = 0
             #for k in range(1,n_timestamps+1):
             #    weight = torch.pow(0.5, torch.flip(torch.arange(k),[0])).to(device).expand_as(to_add[...,:k])
             #    regulariser += (torch.norm(weight*to_add[...,:k]) + torch.norm(weight*to_add[...,-k:]))
             #multi_reg = torch.mean( torch.sum(regulariser))
+            #2) Modes centered at top-k abs value
+            #k_modes = 2
+            #to_add_abs = torch.abs(np.squeeze(to_add) )
+            #_, t_avg = torch.topk(to_add_abs,k_modes,dim=1)
+            #diff = torch.abs(torch.unsqueeze(t_avg, dim=2) - id_temps.expand(1,1,-1))
+            #diff,_ = torch.min(diff,dim=1) # closest centroid
+            #multi_reg = torch.mean( torch.sum( torch.square(diff) * to_add_abs, dim=1) )
+
+
             
             #Total Variation Regularizer L1
             reg_tv = torch.mean( torch.sum( torch.abs( torch.squeeze(to_add[:,:,1:] - to_add[:,:,:-1]) ),dim=1) )
