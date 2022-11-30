@@ -140,21 +140,21 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             #2) max absolute value
             _, t_avg = torch.max(to_add_abs,dim=1)
             #3) convolution (possibly circular)
-            #to_add_abs = torch.abs(to_add)
+            #to_add_abs = torch.abs(to_add) # conv requires 3D tensor
             #sigma, w = 1, 5
             #filter = torch.exp( - (torch.arange(-w,w+1,dtype=torch.float, device=device))**2 / (2*sigma ** 2))
             #filter /= filter.sum()
             #filter = filter[None].expand(1, -1, -1)
             #conv = F.conv1d(F.pad(to_add_abs, (w,w), "circular"), filter)
-            #t_avg = conv.argmax(-1).float()
+            #t_avg = torch.squeeze(conv.argmax(-1).float()) # back to 2D
 
             # Compute distance to t_avg
+            t_avg = torch.unsqueeze(t_avg, 1)
             #1) linear
-            diff = (torch.unsqueeze(t_avg,1) - id_temps)
+            # diff = (t_avg - id_temps)
             #2) circular
-            #t_avg = torch.unsqueeze(t_avg, 1)
-            #diff = torch.minimum(torch.remainder(t_avg - id_temps, n_timestamps),
-            #                     torch.remainder(id_temps - t_avg, n_timestamps))
+            diff = torch.minimum(torch.remainder(t_avg - id_temps, n_timestamps),
+                                torch.remainder(id_temps - t_avg, n_timestamps))
 
             uni_reg = torch.mean( torch.sum( torch.square(diff) * to_add_abs, dim=1) )
             #uni_reg = torch.mean( torch.sum( to_add_abs, dim=1) )
@@ -227,7 +227,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             
             #loss = 4*loss_classif + .1*uni_reg + .01*reg_L2 + .01*reg_tv + loss_g
 
-            loss = 3.*loss_classif + loss_g + .2*uni_reg #+ .05*reg_L2 + .05*reg_tv
+            loss = 1.*loss_classif + .5*loss_g + .05*uni_reg #+ .05*reg_L2 + .05*reg_tv
             loss.backward()
             optimizer.step()
 
