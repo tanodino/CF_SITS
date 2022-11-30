@@ -140,13 +140,12 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             #2) max absolute value
             _, t_avg = torch.max(to_add_abs,dim=1)
             #3) convolution (possibly circular)
-            #to_add_abs = torch.abs(to_add) # conv requires 3D tensor
             #sigma, w = 1, 5
             #filter = torch.exp( - (torch.arange(-w,w+1,dtype=torch.float, device=device))**2 / (2*sigma ** 2))
             #filter /= filter.sum()
-            #filter = filter[None].expand(1, -1, -1)
-            #conv = F.conv1d(F.pad(to_add_abs, (w,w), "circular"), filter)
-            #t_avg = torch.squeeze(conv.argmax(-1).float()) # back to 2D
+            #filter = filter[None].expand(1, -1, -1) # circ. conv requires 3D tensors
+            #conv = F.conv1d(F.pad(torch.unsqueeze(to_add_abs,1), (w,w), "circular"), filter)
+            #t_avg = torch.squeeze(conv.argmax(-1).float())
 
             # Compute distance to t_avg
             t_avg = torch.unsqueeze(t_avg, 1)
