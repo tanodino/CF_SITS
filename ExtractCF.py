@@ -39,6 +39,7 @@ def writeImages(mtxHash, output_folder, dates):
     pca_mtx50 = np.zeros_like(norm_mtx)
     pca_mtx70 = np.zeros_like(norm_mtx)
     pca_mtx90 = np.zeros_like(norm_mtx)
+    density_nz = []
 
     threshold = getPercentile(mtxHash,40)
 
@@ -94,9 +95,19 @@ def writeImages(mtxHash, output_folder, dates):
             notsmall_mtx[source_k,sink_k] = np.mean(np.sum(mtx>1e-8,axis=1))/mtx.shape[1]
             sum_mtx[source_k,sink_k] = mtx.shape[0]
 
-    output_path = output_folder + 'mtx'
+            # Non-zero ratio histogram
+            density_nz.append(np.sum(mtx>1e-8,axis=1)/mtx.shape[1])
+
+
+    output_path = output_folder + 'mtx/'
     if not os.path.exists(output_path):
         os.makedirs(output_path)
+
+    title = f'Non-zero density'
+    plt.clf()
+    plt.hist(np.ravel(np.concatenate(density_nz)))
+    plt.title(title)
+    plt.savefig(output_path + '/nonZero_density.png', bbox_inches="tight")
 
     title = f'PCA components required to explain 70% of variance'
     rowLabels = range(pca_mtx90.shape[0])
@@ -308,7 +319,7 @@ def main(argv):
     noiser.load_state_dict(torch.load(path_file_noiser))
 
     pred, pred_CF, dataCF, noiseCF = predictionAndCF(model, noiser, train_dataloader, device)
-    
+
     cm = confusion_matrix(pred, pred_CF)
     print("[")
     for row in cm:
@@ -324,6 +335,26 @@ def main(argv):
     writeImages(mtxHash, output_folder, dates)
 
     writeChord(cm, output_folder + "chord_graph_CF.pdf")
+
+    # TSNE
+    tsne = TSNE(n_components=2, random_state=0)
+    X_2d = tsne.fit_transform(noiseCF)
+
+    plt.clf()
+    plt.figure()
+    colors = ["#dead0a", "#cfbc8d", "#867025",
+            "#69ef73", "#21a52b", "#02650a", "#333435", "#0a5ade"]    
+    # colors = 'r', 'g', 'b', 'c', 'm', 'y', 'k', 'w'
+    for source_k in range(n_classes):
+        for sink_k in range(n_classes):
+            idx = (pred==source_k) & (pred_CF==sink_k)
+            if idx.sum() > 300 and (source_k != sink_k): #any(idx)
+                label = f'cl{source_k}->{sink_k}'
+                plt.scatter(X_2d[idx,0], X_2d[idx,1], color=colors[source_k], alpha=(1-sink_k/len(colors)), label=label)
+    plt.legend()
+    plt.savefig(output_folder + "TSNE.png", bbox_inches = "tight")
+
+
 
     '''
     exit()
