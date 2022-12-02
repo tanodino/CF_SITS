@@ -9,6 +9,7 @@ import random
 import pandas as pd
 import random
 import numpy as np
+import matplotlib.colors as mcolors
 
 import matplotlib.pyplot as plt
 
@@ -152,10 +153,11 @@ ax.scatter(
     data['date'].tolist(),
     [1] * data.shape[0],
     #c=data['event_color'].tolist(),
-    s=500,
+    s=300,
+    c = 'red',
     marker='o',
     linewidth=1,
-    alpha=.5)
+    alpha=1.)
 
 plt.savefig("prova.png")
 
