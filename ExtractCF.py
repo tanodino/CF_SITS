@@ -36,6 +36,7 @@ def writeImages(mtxHash, output_folder, dates):
     nonzero_mtx = np.zeros_like(norm_mtx)
     notsmall_mtx = np.zeros_like(norm_mtx)
     sum_mtx = np.zeros_like(norm_mtx)
+    pca_mtx50 = np.zeros_like(norm_mtx)
     pca_mtx70 = np.zeros_like(norm_mtx)
     pca_mtx90 = np.zeros_like(norm_mtx)
 
@@ -83,6 +84,7 @@ def writeImages(mtxHash, output_folder, dates):
             output_name = output_path + "cl%d_moved2_cl%d.png"%(source_k, sink_k)
             plt.savefig(output_name, bbox_inches = "tight")
 
+            pca_mtx50[source_k,sink_k] = np.argmax(explained>50) + 1 if any(explained>50) else float('NaN')
             pca_mtx70[source_k,sink_k] = np.argmax(explained>70) + 1 if any(explained>70) else float('NaN')
             pca_mtx90[source_k,sink_k] = np.argmax(explained>90) + 1 if any(explained>90) else float('NaN')
 
@@ -97,10 +99,27 @@ def writeImages(mtxHash, output_folder, dates):
         os.makedirs(output_path)
 
     title = f'PCA components required to explain 70% of variance'
-    writeTable(pca_mtx70, title, output_path+"/pcaMtx70.png")
+    rowLabels = range(pca_mtx90.shape[0])
+    colLabels = range(pca_mtx90.shape[0])
+    pca_mtx70[pca_mtx70==0] = float('NaN')
+    writeTable(pca_mtx70, title, rowLabels, colLabels, output_path+"/pcaMtx70.png")
 
     title = f'PCA components required to explain 90% of variance'
-    writeTable(pca_mtx90, title, output_path+"/pcaMtx90.png")
+    pca_mtx90[pca_mtx90==0] = float('NaN')
+    writeTable(pca_mtx90, title, rowLabels, colLabels, output_path+"/pcaMtx90.png")
+
+    title = f'Average PCA components'
+    idx = (sum_mtx != 0)&(~np.isnan(pca_mtx90))
+    pca_avg50 = np.average(pca_mtx50[idx], weights=sum_mtx[idx])
+    pca_std50 = np.sqrt(np.average((pca_mtx50[idx]-pca_avg50)**2, weights=sum_mtx[idx]))
+    pca_avg70 = np.average(pca_mtx70[idx], weights=sum_mtx[idx])
+    pca_std70 = np.sqrt(np.average((pca_mtx70[idx]-pca_avg70)**2, weights=sum_mtx[idx]))
+    pca_avg90 = np.average(pca_mtx90[idx], weights=sum_mtx[idx])
+    pca_std90 = np.sqrt(np.average((pca_mtx90[idx]-pca_avg90)**2, weights=sum_mtx[idx]))
+    cellText = [[f'{pca_avg50:.1f} \u00B1 {pca_std50:.1f}', f'{pca_avg70:.1f} \u00B1 {pca_std70:.1f}', f'{pca_avg90:.1f} \u00B1 {pca_std90:.1f}']]
+    colLabels = ['50%', '70%', '90%']
+    rowLabels = ['Nb. components']
+    writeTable(cellText, title, rowLabels, colLabels, output_path+"/pca_avg.png", colors=False)
 
     title = f'Average norm of CF perturbation per class transition'
     writeImageMtx(norm_mtx, title, output_path+"/normMtx.png")
@@ -141,26 +160,24 @@ def writeImageMtx(mtx, title, output_name, log=True):
     plt.savefig(output_name, bbox_inches = "tight")
 
 
-def writeTable(data, title, output_name):
-    fig = plt.figure(figsize=(8,4))
-    plt.title(title)
-    ax = fig.add_subplot(111, frameon=True, xticks = [], yticks = [])
-    img = plt.imshow(data, cmap="YlOrRd") #hot_r
-    # plt.colorbar()
-    img.set_visible(False)
-    tb = plt.table(cellText = data,
-        rowLabels = range(data.shape[0]),
-        colLabels = range(data.shape[0]),
+def writeTable(data, title, rowLabels, colLabels, output_name, colors=True):
+    fig, ax = plt.subplots()
+    fig.patch.set_visible(False)
+    ax.axis('off')
+    ax.axis('tight')
+    cellColours = None
+    if colors:
+        img = plt.imshow(data, cmap="YlOrRd") #hot_r
+        img.set_visible(False)
+        cellColours = img.to_rgba(data)
+    plt.table(cellText = data,
+        rowLabels = rowLabels,
+        colLabels = colLabels,
         loc = 'center',
-        cellColours = img.to_rgba(data))
-    ax.add_table(tb)
+        cellColours = cellColours)
+    # ax.set_title(title)
+    fig.tight_layout()
     plt.savefig(output_name, bbox_inches = "tight")
-
-    # fig, ax = plt.subplots()
-    # # Using matshow here just because it sets the ticks up nicely. imshow is faster.
-    # ax.matshow(data, cmap='seismic')
-    # for (i, j), z in np.ndenumerate(data):
-    #     ax.text(j, i, '{:0.1f}'.format(z), ha='center', va='center')
 
 
 def getPercentile(mtxHash,percent):
