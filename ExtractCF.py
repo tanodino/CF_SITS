@@ -14,6 +14,7 @@ import pandas as pd
 from torch.utils.data import TensorDataset, DataLoader
 # import chord
 # from chord import Chord
+from mpl_chord_diagram import chord_diagram # pip install mpl-chord-diagram
 from sklearn.metrics import confusion_matrix
 from sklearn.decomposition import PCA
 
@@ -116,6 +117,17 @@ def writeImages(mtxHash, output_folder, dates):
     title = ('Average not small entries in CF pertubation per class transition' +
             f'\n Overall average = {weightedAvg_notsmall:.2f}')
     writeImageMtx(notsmall_mtx, title, output_path+"/notSmallMtx.png", log=False)
+
+def writeChord(flux, output_name):
+    names = ["CEREALS", "COTTON", "OLEAGINOUS", "GRASSLAND",
+            "SHRUBLAND", "FOREST", "B.", "W."]  # "BUILT-UP", "WATER"
+    colors = ["#dead0a", "#cfbc8d", "#867025",
+            "#69ef73", "#21a52b", "#02650a", "#333435", "#0a5ade"]
+
+    plt.clf()
+    chord_diagram(flux, names, gap=0.05, sort="distance", directed=True,
+                colors=colors, chordwidth=0.5)
+    plt.savefig(output_name, format="pdf", bbox_inches="tight")
 
 
 def writeImageMtx(mtx, title, output_name, log=True):
@@ -293,6 +305,9 @@ def main(argv):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
     writeImages(mtxHash, output_folder, dates)
+
+    writeChord(cm, output_folder + "chord_graph_CF.pdf")
+
     '''
     exit()
     
