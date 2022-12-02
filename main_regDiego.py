@@ -107,6 +107,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
         loss_generator = []
         loss_uni = []
         t_avg_all = []
+        non_zeros = [] # just to track sparsity
 
         for x_batch, y_batch in train:
             noiser.zero_grad()
@@ -189,13 +190,16 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
 
 
             #L1 regularizer
-            #reg_L1 = torch.mean( torch.sum( torch.abs(torch.squeeze(to_add)), dim=1) )
+            reg_L1 = torch.mean( torch.sum( torch.abs(torch.squeeze(to_add)), dim=1) )
             #loss += 5.*reg_L1
 
 
             #L2 Regularization
             reg_L2 = torch.mean( torch.sum( torch.square(torch.squeeze(to_add)), dim=1) )
             #loss += 
+
+            # L0 norm (to track sparsity)
+            L0 = torch.mean(torch.count_nonzero(torch.squeeze(to_add), dim=1).float() )
             
             #magnitude, _ = torch.max( torch.abs( torch.squeeze(x_cf) - torch.squeeze(x_batch) ), dim=1)
             #reg_sim = torch.mean( magnitude )
@@ -240,16 +244,19 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             #loss_reg_entro.append(reg_entro.cpu().detach().numpy() )
             loss_reg_tv.append( reg_tv.cpu().detach().numpy())
             #loss_reg_tv.append( 0 )
+            loss_reg_L1.append( reg_L1.cpu().detach().numpy())
+            #loss_reg_L1.append( 0 )
             loss_reg_L2.append( reg_L2.cpu().detach().numpy())
             #loss_reg_L2.append( 0 )
             loss_generator.append(loss_g.cpu().detach().numpy())
             #loss_generator.append( 0 )
             loss_uni.append(uni_reg.cpu().detach().numpy())
             t_avg_all.append(t_avg.cpu().detach().numpy())
+            non_zeros.append(L0.cpu().detach().numpy())
 
 
 
-        print("epoch %d with Gen loss %f (l_GEN %f l_CL %f and and l_entro %f and l_TV %f and reg_L2 %f and reg_UNI %f) and Discr Loss %f"%(e, np.mean(loss_acc), np.mean(loss_generator), np.mean(loss_cl), np.mean(loss_reg_entro), np.mean(loss_reg_tv), np.mean(loss_reg_L2), np.mean(loss_uni), np.mean(loss_discr)))
+        print("epoch %d with Gen loss %f (l_GEN %f l_CL %f and reg_L1 %f and l_TV %f and reg_L2 %f and reg_UNI %f) and Discr Loss %f and L0 %.1f"%(e, np.mean(loss_acc), np.mean(loss_generator), np.mean(loss_cl), np.mean(loss_reg_L1), np.mean(loss_reg_tv), np.mean(loss_reg_L2), np.mean(loss_uni), np.mean(loss_discr), np.mean(non_zeros)))
         data, dataCF, pred, pred_cf, orig_label = generateOrigAndAdd(model, noiser, train, device)
         #print("F1 SCORE original model %f"%f1_score(orig_label, pred,average="weighted"))
         #exit()
