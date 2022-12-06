@@ -296,15 +296,23 @@ def main(argv):
     y_train = np.load("y_train_%d.npy"%year)-1.
     n_classes = len(np.unique(y_train))
 
+    x_test = np.load("x_test_%d.npy"%year)
+    x_test = np.moveaxis(x_test,(0,1,2),(0,2,1))
+    y_test = np.load("y_test_%d.npy"%year)-1.
+
     x_train = extractNDVI(x_train)
+    x_test = extractNDVI(x_test)
 
     n_timestamps = x_train.shape[-1]
     
     x_train_pytorch = torch.Tensor(x_train) # transform to torch tensor
+    x_test_pytorch = torch.Tensor(x_test)
     
     train_dataset = TensorDataset(x_train_pytorch) # create your datset
+    test_dataset = TensorDataset(x_test_pytorch)
 
     train_dataloader = DataLoader(train_dataset, shuffle=False, batch_size=2048)    
+    test_dataloader = DataLoader(test_dataset, shuffle=False, batch_size=2048)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = S2Classif(n_classes, dropout_rate = .5)
     noiser = Noiser(n_timestamps, .3)
@@ -314,19 +322,43 @@ def main(argv):
     file_path = "model_weights_tempCNN"
     model.load_state_dict(torch.load(file_path))
 
-    #path_file_noiser = "noiser_weights"
-    path_file_noiser = "noiser_weights_UNI"
+    path_file_noiser = "noiser_weights"
     noiser.load_state_dict(torch.load(path_file_noiser))
 
+    # CF on training data
     pred, pred_CF, dataCF, noiseCF = predictionAndCF(model, noiser, train_dataloader, device)
 
-    cm = confusion_matrix(pred, pred_CF)
+    print(f"\nFiltering for classifier's correct predictions ({sum(pred==y_train)} out of {pred.shape[0]})\n")
+    correct_idx = (pred==y_train)
+
+    cm = confusion_matrix(pred[correct_idx], pred_CF[correct_idx])
+    print("TRAINING DATA Confusion matrix (original prediction vs. CF prediction):")    
     print("[")
     for row in cm:
-        row_str = ",".join( [str(el) for el in row] )
+        row_str = ",".join( ['{:5d}'.format(el) for el in row] )
         print("["+row_str+"],")
-    print("]")
+    print("]")    
+    number_of_changes = sum(pred[correct_idx] != pred_CF[correct_idx])
+    print("NUMER OF CHANGED PREDICTIONS : %d over %d, original size is %d"%(number_of_changes, pred[correct_idx].shape[0], pred.shape[0]))
+        
+    # CF on test data
+    pred_test, pred_CF_test, dataCF_test, noiseCF_test = predictionAndCF(model, noiser, test_dataloader, device)
 
+    print(f"\nFiltering for classifier's correct predictions ({sum(pred_test==y_test)} out of {pred_test.shape[0]})\n")
+    correct_idx = (pred_test==y_test)
+
+    cm_test = confusion_matrix(pred_test[correct_idx], pred_CF_test[correct_idx])
+    print("TEST DATA Confusion matrix (original prediction vs. CF prediction):")    
+    print("[")
+    for row in cm_test:
+        row_str = ",".join( ['{:5d}'.format(el) for el in row] )
+        print("["+row_str+"],")
+    print("]")    
+    number_of_changes = sum(pred_test[correct_idx] != pred_CF_test[correct_idx])
+    print("NUMER OF CHANGED PREDICTIONS : %d over %d, original size is %d"%(number_of_changes, pred_test[correct_idx].shape[0], pred_test.shape[0]))
+
+
+    # Analyzing generated perturbations
     mtxHash = extractTransitions(pred, pred_CF, noiseCF)
 
     output_folder = "img/"
@@ -334,7 +366,8 @@ def main(argv):
         os.makedirs(output_folder)
     writeImages(mtxHash, output_folder, dates)
 
-    writeChord(cm, output_folder + "chord_graph_CF.pdf")
+    writeChord(cm, output_folder + "chord_graph_CF_train.pdf")
+    writeChord(cm_test, output_folder + "chord_graph_CF_test.pdf")
 
     # TSNE
     tsne = TSNE(n_components=2, random_state=0)

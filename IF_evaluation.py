@@ -9,6 +9,8 @@ from sklearn.utils import shuffle
 import time
 from sklearn.manifold import TSNE
 from sklearn.metrics import normalized_mutual_info_score
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score
 
 from torch.utils.data import TensorDataset, DataLoader
 
@@ -87,8 +89,19 @@ def main(argv):
     pred_cf = applyIF(clf, dataCF)
     print(np.bincount(pred_cf))
     
-    print("NMI score %f"%( normalized_mutual_info_score(pred_orig, pred_cf)) )
-    
+    # Metrics
+    print("\nISOLATION FOREST RESULTS:")
+    print("\nNMI score: %f"%( normalized_mutual_info_score(pred_orig, pred_cf)) )    
+    print("\nAccuracy: %f"%( accuracy_score(pred_orig, pred_cf)) )
+
+    cm = confusion_matrix(pred_orig, pred_cf)
+    print("\nConfusion matrix: (isolation forest prediction on original data vs. IF prediction on CF)")
+    print("[")
+    for row in cm:
+        row_str = ",".join( [str(el) for el in row] )
+        print("["+row_str+"],")
+    print("]")
+
     exit()
 
     my_dict = {'ABC': pred, 'DEF': pred_cf}

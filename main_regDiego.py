@@ -284,10 +284,10 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
         ex_cfcl = pred_cf[idx]
 
         #Central time histogram
-        #plt.clf()
-        #t_avg_all = np.concatenate(t_avg_all,axis=0)
-        #plt.hist(t_avg_all.squeeze(), bins=np.concatenate(([-.5],np.arange(n_timestamps))))
-        #plt.savefig("epoch_%d_t_avg_hist.jpg"%(e) )
+        plt.clf()
+        t_avg_all = np.concatenate(t_avg_all,axis=0)
+        plt.hist(t_avg_all.squeeze(), bins=np.concatenate(([-.5],np.arange(n_timestamps))))
+        plt.savefig("epoch_%d_t_avg_hist.jpg"%(e) )
 
         plt.clf()
         plt.plot(np.arange(len(sample)), sample,'b')
@@ -333,6 +333,9 @@ def extractNDVI(x_train):
 
 def main(argv):
     year = 2020#int(argv[1])
+
+    torch.manual_seed(0)
+    print('\n=========\nManual seed activated for reproducibility\n=========')
 
     x_train = np.load("x_train_%d.npy"%year)
     x_valid = np.load("x_valid_%d.npy"%year)
@@ -394,7 +397,7 @@ def main(argv):
     
     loss_ce = nn.CrossEntropyLoss().to(device)
     loss_bce = nn.BCELoss().to(device)
-    n_epochs = 150
+    n_epochs = 100
     #file_path = "model_weights"
     file_path = "model_weights_tempCNN"
     #file_path = "model_weights"
@@ -402,7 +405,7 @@ def main(argv):
     for p in model.parameters():
         p.requires_grad = False
 
-    path_file_noiser = "noiser_weights_UNI"
+    path_file_noiser = "noiser_weights"
     #trainModel(model, train_dataloader, valid_dataloader, n_epochs, loss_ce, optimizer, file_path, device)
     trainModelNoise(model, noiser, discr, train_dataloader, n_epochs, n_classes, optimizer, optimizerD, loss_bce, n_timestamps, device, path_file_noiser)
     
