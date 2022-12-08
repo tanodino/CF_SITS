@@ -82,8 +82,9 @@ def writeImages(mtxHash, output_folder, dates):
             output_path = output_folder + "PCA/"
             if not os.path.exists(output_path):
                 os.makedirs(output_path)
-            output_name = output_path + "cl%d_moved2_cl%d.png"%(source_k, sink_k)
+            output_name = output_path + "cl%d_moved2_cl%d_var.png"%(source_k, sink_k)
             plt.savefig(output_name, bbox_inches = "tight")
+            # writeImageMeanProfile(source_k, sink_k, pca.components_[0], np.zeros_like(pca.components_[0]), dates, output_path, mtx.shape[0])
 
             pca_mtx50[source_k,sink_k] = np.argmax(explained>50) + 1 if any(explained>50) else float('NaN')
             pca_mtx70[source_k,sink_k] = np.argmax(explained>70) + 1 if any(explained>70) else float('NaN')
@@ -345,17 +346,38 @@ def main(argv):
     pred_test, pred_CF_test, dataCF_test, noiseCF_test = predictionAndCF(model, noiser, test_dataloader, device)
 
     print(f"\nFiltering for classifier's correct predictions ({sum(pred_test==y_test)} out of {pred_test.shape[0]})\n")
-    correct_idx = (pred_test==y_test)
+    correct_idx_t = (pred_test==y_test)
 
-    cm_test = confusion_matrix(pred_test[correct_idx], pred_CF_test[correct_idx])
+    cm_test = confusion_matrix(pred_test[correct_idx_t], pred_CF_test[correct_idx_t])
     print("TEST DATA Confusion matrix (original prediction vs. CF prediction):")    
     print("[")
     for row in cm_test:
         row_str = ",".join( ['{:5d}'.format(el) for el in row] )
         print("["+row_str+"],")
     print("]")    
-    number_of_changes = sum(pred_test[correct_idx] != pred_CF_test[correct_idx])
-    print("NUMER OF CHANGED PREDICTIONS : %d over %d, original size is %d"%(number_of_changes, pred_test[correct_idx].shape[0], pred_test.shape[0]))
+    number_of_changes = sum(pred_test[correct_idx_t] != pred_CF_test[correct_idx_t])
+    print("NUMER OF CHANGED PREDICTIONS : %d over %d, original size is %d"%(number_of_changes, pred_test[correct_idx_t].shape[0], pred_test.shape[0]))
+
+    # Plot some CF examples
+    output_path = 'img/examplesCF/'
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+    sources = [4, 5]
+    sinks = [5, 4]
+    for source_k, sink_k in zip(sources, sinks):
+        CF = dataCF[correct_idx & (pred==source_k) & (pred_CF==sink_k)].squeeze()
+        x = CF - noiseCF[correct_idx & (pred==source_k) & (pred_CF==sink_k)] 
+        idx = np.random.randint(CF.shape[0], size=min(50,CF.shape[0]))
+        # nice idx: 1177, 1404, 1729
+        for k in idx:
+            output_name = output_path + f'/cl{source_k}_to_cl{sink_k}_{k}.png'
+            plt.clf()
+            plt.plot(dates, x[k], label=f'Real (class {source_k})')
+            plt.plot(dates, CF[k], label=f'CF (class {sink_k})')
+            plt.xticks(rotation = 45) # Rotates X-Axis Ticks by 45-degrees
+            plt.ylabel('NDVI')
+            plt.legend()
+            plt.savefig(output_name, bbox_inches = "tight")
 
 
     # Analyzing generated perturbations
@@ -369,10 +391,12 @@ def main(argv):
     writeChord(cm, output_folder + "chord_graph_CF_train.pdf")
     writeChord(cm_test, output_folder + "chord_graph_CF_test.pdf")
 
+    '''
+    exit()
+    
     # TSNE
     tsne = TSNE(n_components=2, random_state=0)
     X_2d = tsne.fit_transform(noiseCF)
-
     plt.clf()
     plt.figure()
     colors = ["#dead0a", "#cfbc8d", "#867025",
@@ -386,14 +410,8 @@ def main(argv):
                 plt.scatter(X_2d[idx,0], X_2d[idx,1], color=colors[source_k], alpha=(1-sink_k/len(colors)), label=label)
     plt.legend()
     plt.savefig(output_folder + "TSNE.png", bbox_inches = "tight")
-
-
-
-    '''
-    exit()
     
-    
-    
+    # Other
     idx = np.where(pred == y_test)[0]
     pred = pred[idx]
     pred_CF = pred_CF[idx]

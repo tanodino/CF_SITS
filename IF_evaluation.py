@@ -53,6 +53,11 @@ def extractNDVI(x_train):
 
 def main(argv):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    torch.manual_seed(1)
+    np.random.seed(1)
+    print('\n=========\nManual seed activated for reproducibility\n=========')
+
     year = 2020
     x_train = np.load("x_train_%d.npy"%year)
     x_test = np.load("x_test_%d.npy"%year)
