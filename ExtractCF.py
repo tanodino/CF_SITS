@@ -27,7 +27,7 @@ from matplotlib import colors
 from model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
 
 
-def writeImages(mtxHash, output_folder, dates):
+def writeImages(mtxHash, output_folder, dates, names):
 
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -51,18 +51,18 @@ def writeImages(mtxHash, output_folder, dates):
             output_path = output_folder + 'avgPattern'
             AvgProfileMean = np.mean(mtx,axis=0)
             AvgProfileStd = np.std(mtx,axis=0)
-            writeImageMeanProfile(source_k, sink_k, AvgProfileMean , AvgProfileStd, dates, output_path, mtx.shape[0])
+            writeImageMeanProfile(source_k, sink_k, AvgProfileMean , AvgProfileStd, dates, output_path, names, mtx.shape[0])
 
             output_path = output_folder + 'avgPatternAbs'
             AvgProfileMeanAbs = np.mean(np.abs(mtx),axis=0)
             AvgProfileStd = np.std(np.abs(mtx),axis=0)
-            writeImageMeanProfile(source_k, sink_k, AvgProfileMeanAbs , AvgProfileStd, dates, output_path, mtx.shape[0])
+            writeImageMeanProfile(source_k, sink_k, AvgProfileMeanAbs , AvgProfileStd, dates, output_path, names, mtx.shape[0])
 
             # Support histogram per transition
             histogram = (mtx>threshold).sum(axis=0)
             plt.clf()
             plt.bar(range(len(dates)),histogram)
-            plt.title(f'Support histogram cl{source_k}->{sink_k} ({mtx.shape[0]} CFs)')
+            plt.title(f'Support histogram {names[source_k]}->{names[sink_k]} ({mtx.shape[0]} CFs)')
             output_path = output_folder + "histSupport/"
             if not os.path.exists(output_path):
                 os.makedirs(output_path)
@@ -76,7 +76,7 @@ def writeImages(mtxHash, output_folder, dates):
             plt.clf()
             explained = np.cumsum(pca.explained_variance_ratio_) * 100
             plt.plot(range(1,n_components+1), explained)
-            plt.title(f'PCA analysis cl{source_k}->{sink_k} ({mtx.shape[0]} CFs)')
+            plt.title(f'PCA analysis {names[source_k]}->{names[sink_k]} ({mtx.shape[0]} CFs)')
             plt.ylabel('Explained variance (%)')
             plt.xlabel('Number of components')
             output_path = output_folder + "PCA/"
@@ -84,7 +84,7 @@ def writeImages(mtxHash, output_folder, dates):
                 os.makedirs(output_path)
             output_name = output_path + "cl%d_moved2_cl%d_var.png"%(source_k, sink_k)
             plt.savefig(output_name, bbox_inches = "tight")
-            # writeImageMeanProfile(source_k, sink_k, pca.components_[0], np.zeros_like(pca.components_[0]), dates, output_path, mtx.shape[0])
+            # writeImageMeanProfile(source_k, sink_k, pca.components_[0], np.zeros_like(pca.components_[0]), dates, output_path, names, mtx.shape[0])
 
             pca_mtx50[source_k,sink_k] = np.argmax(explained>50) + 1 if any(explained>50) else float('NaN')
             pca_mtx70[source_k,sink_k] = np.argmax(explained>70) + 1 if any(explained>70) else float('NaN')
@@ -149,9 +149,8 @@ def writeImages(mtxHash, output_folder, dates):
             f'\n Overall average = {weightedAvg_notsmall:.2f}')
     writeImageMtx(notsmall_mtx, title, output_path+"/notSmallMtx.png", log=False)
 
-def writeChord(flux, output_name):
-    names = ["CEREALS", "COTTON", "OLEAGINOUS", "GRASSLAND",
-            "SHRUBLAND", "FOREST", "B.", "W."]  # "BUILT-UP", "WATER"
+def writeChord(flux, names, output_name):
+
     colors = ["#dead0a", "#cfbc8d", "#867025",
             "#69ef73", "#21a52b", "#02650a", "#333435", "#0a5ade"]
 
@@ -200,7 +199,7 @@ def getPercentile(mtxHash,percent):
     return np.percentile(np.concatenate(mtx_all), percent)
 
 
-def writeImageMeanProfile(source_k, sink_k, avgProfile, stdProfile, x_axis, output_folder, n_CF='?'):
+def writeImageMeanProfile(source_k, sink_k, avgProfile, stdProfile, x_axis, output_folder, names, n_CF='?'):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
     output_name = output_folder+"/cl%d_moved2_cl%d.png"%(source_k, sink_k)
@@ -211,7 +210,7 @@ def writeImageMeanProfile(source_k, sink_k, avgProfile, stdProfile, x_axis, outp
     plt.plot(x_axis, avgProfile, color='#CC4F1B')
     plt.plot(x_axis, np.zeros(len(x_axis)), color='#000000')
     plt.fill_between(x_axis, avgProfile-stdProfile, avgProfile+stdProfile, alpha=0.5, edgecolor='#CC4F1B', facecolor='#FF9848')
-    plt.title(f'cl{source_k}->{sink_k} ({n_CF} CFs)')
+    plt.title(fr'{names[source_k]} $\rightarrow$ {names[sink_k]} ({n_CF} CFs)')
     plt.xticks(rotation = 45) # Rotates X-Axis Ticks by 45-degrees
     plt.savefig(output_name, bbox_inches = "tight")
 
@@ -291,6 +290,10 @@ def main(argv):
              20200628, 20200703, 20200723, 20200921, 20200926, 20201006,
              20201021, 20201031, 20201115, 20201130, 20201215, 20201230],
              format='%Y%m%d')
+    names = ["Cereals", "Cotton", "Oleaginous", "Grassland",
+            "Shrubland", "Forest", "Built-up", "Water"] 
+    names_chord = ["CEREALS", "COTTON", "OLEAGINOUS", "GRASSLAND",
+            "SHRUBLAND", "FOREST", "B.", "W."]  # "BUILT-UP", "WATER"
 
     x_train = np.load("x_train_%d.npy"%year)
     x_train = np.moveaxis(x_train,(0,1,2),(0,2,1))
@@ -341,6 +344,9 @@ def main(argv):
     print("]")    
     number_of_changes = sum(pred[correct_idx] != pred_CF[correct_idx])
     print("NUMER OF CHANGED PREDICTIONS : %d over %d, original size is %d"%(number_of_changes, pred[correct_idx].shape[0], pred.shape[0]))
+
+    print(f'\nNoise avg. L2 norm: {np.linalg.norm(noiseCF, ord=2, axis=1).mean()} (+- {np.linalg.norm(noiseCF, ord=2, axis=1).std()})')
+    print(f'Noise avg. L1 norm: {np.linalg.norm(noiseCF, ord=1, axis=1).mean()} (+- {np.linalg.norm(noiseCF, ord=1, axis=1).std()})')
         
     # CF on test data
     pred_test, pred_CF_test, dataCF_test, noiseCF_test = predictionAndCF(model, noiser, test_dataloader, device)
@@ -358,6 +364,9 @@ def main(argv):
     number_of_changes = sum(pred_test[correct_idx_t] != pred_CF_test[correct_idx_t])
     print("NUMER OF CHANGED PREDICTIONS : %d over %d, original size is %d"%(number_of_changes, pred_test[correct_idx_t].shape[0], pred_test.shape[0]))
 
+    print(f'\nNoise avg. L2 norm: {np.linalg.norm(noiseCF_test, ord=2, axis=1).mean()} (+- {np.linalg.norm(noiseCF_test, ord=2, axis=1).std()})')
+    print(f'Noise avg. L1 norm: {np.linalg.norm(noiseCF_test, ord=1, axis=1).mean()} (+- {np.linalg.norm(noiseCF_test, ord=1, axis=1).std()})')
+
     # Plot some CF examples
     output_path = 'img/examplesCF/'
     if not os.path.exists(output_path):
@@ -367,16 +376,17 @@ def main(argv):
     for source_k, sink_k in zip(sources, sinks):
         CF = dataCF[correct_idx & (pred==source_k) & (pred_CF==sink_k)].squeeze()
         x = CF - noiseCF[correct_idx & (pred==source_k) & (pred_CF==sink_k)] 
-        idx = np.random.randint(CF.shape[0], size=min(50,CF.shape[0]))
-        # nice idx: 1177, 1404, 1729
+        idx = np.random.randint(CF.shape[0], size=min(46,CF.shape[0]))
+        # idx = np.array([1177, 2207, 1729, 1136]) # selected indices
         for k in idx:
             output_name = output_path + f'/cl{source_k}_to_cl{sink_k}_{k}.png'
             plt.clf()
-            plt.plot(dates, x[k], label=f'Real (class {source_k})')
-            plt.plot(dates, CF[k], label=f'CF (class {sink_k})')
+            plt.figure(figsize=(3.6,2.7)) #(4,3)
+            plt.plot(dates, x[k], label=f'Real ({names[source_k]})')
+            plt.plot(dates, CF[k], label=f'CF ({names[sink_k]})')
             plt.xticks(rotation = 45) # Rotates X-Axis Ticks by 45-degrees
             plt.ylabel('NDVI')
-            plt.legend()
+            plt.legend(frameon=False)
             plt.savefig(output_name, bbox_inches = "tight")
 
 
@@ -386,10 +396,10 @@ def main(argv):
     output_folder = "img/"
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
-    writeImages(mtxHash, output_folder, dates)
+    writeImages(mtxHash, output_folder, dates, names)
 
-    writeChord(cm, output_folder + "chord_graph_CF_train.pdf")
-    writeChord(cm_test, output_folder + "chord_graph_CF_test.pdf")
+    writeChord(cm, names_chord, output_folder + "chord_graph_CF_train.pdf")
+    writeChord(cm_test, names_chord, output_folder + "chord_graph_CF_test.pdf")
 
     '''
     exit()

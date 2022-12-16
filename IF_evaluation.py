@@ -9,7 +9,7 @@ from sklearn.utils import shuffle
 import time
 from sklearn.manifold import TSNE
 from sklearn.metrics import normalized_mutual_info_score
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.metrics import accuracy_score
 
 from torch.utils.data import TensorDataset, DataLoader
@@ -51,6 +51,23 @@ def extractNDVI(x_train):
     temp_data = (nir - red ) / ( (nir + red) + eps )
     return np.expand_dims(temp_data, 1)
 
+def plotConfusionMatrix(cm, title, filename, vmax=False):
+    _, ax = plt.subplots(figsize=(2.8,2.1))
+    cmd_obj = ConfusionMatrixDisplay(np.flip(cm), display_labels=['Inlier', 'Outlier'])
+    cmd_obj.plot(colorbar=False,cmap='Oranges',ax=ax)
+    cmd_obj.ax_.set(title= title,
+                    xlabel='Counterfactual', 
+                    ylabel='Real')
+    if vmax:
+        for im in ax.get_images(): # set clim manually (to match with ablated model)
+            im.set_clim(vmin=1,vmax=vmax)
+
+    # Save figure
+    output_folder = 'img/IF_evaluation/'
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    plt.savefig(output_folder + filename, bbox_inches = "tight")    
+
 def main(argv):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -89,10 +106,10 @@ def main(argv):
     x_test = np.squeeze(x_test)
 
     pred_orig = applyIF(clf, x_test)
-    print(np.bincount(pred_orig))
+    print(f'Real data [outliers, inliers]: {np.bincount(pred_orig)}')
     
     pred_cf = applyIF(clf, dataCF)
-    print(np.bincount(pred_cf))
+    print(f'CF data   [outliers, inliers]: {np.bincount(pred_cf)}')
     
     # Metrics
     print("\nISOLATION FOREST RESULTS:")
@@ -106,6 +123,13 @@ def main(argv):
         row_str = ",".join( [str(el) for el in row] )
         print("["+row_str+"],")
     print("]")
+    cm_norm = confusion_matrix(pred_orig, pred_cf,normalize='true')    
+
+    title = 'Non-adversarial' if path_file_noiser == "noiser_weights_noGen" else 'Proposed model'
+    filename = 'cm_noGen.pdf' if path_file_noiser == "noiser_weights_noGen" else 'cm.pdf'          
+    plotConfusionMatrix(cm, title, filename, x_test.shape[0])
+    filename = 'cmNorm_noGen.pdf' if path_file_noiser == "noiser_weights_noGen" else 'cmNorm.pdf'
+    plotConfusionMatrix(cm_norm, title, filename)
 
     exit()
 
