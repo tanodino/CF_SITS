@@ -121,20 +121,22 @@ class Discr(nn.Module):
 
 
 
-
 class Noiser(nn.Module):
-    def __init__(self, dim, dropout_rate = 0.0, hidden_activation='relu', output_activation=None,
+    def __init__(self, dim, dropout_rate = 0.0, n_var=1, hidden_activation='relu', output_activation=None,
                  name='Noiser',
                  **kwargs):
         super(Noiser, self).__init__(**kwargs)
-        self.dense1 = nn.LazyLinear(128)
-        self.bn1 = nn.BatchNorm1d(128)
+        hidden_dim = 128*n_var
+
+        self.flatten = nn.Flatten()
+        self.dense1 = nn.LazyLinear(hidden_dim)
+        self.bn1 = nn.BatchNorm1d(hidden_dim)
         #self.tanh1 = nn.Tanh()#nn.ReLU()
         self.tanh1 = nn.ReLU()
         self.dp1 = nn.Dropout(dropout_rate)
 
-        self.dense2 = nn.LazyLinear(128)
-        self.bn2 = nn.BatchNorm1d(128)
+        self.dense2 = nn.LazyLinear(hidden_dim)
+        self.bn2 = nn.BatchNorm1d(hidden_dim)
         #self.tanh2 = nn.Tanh()#nn.ReLU()
         self.tanh2 = nn.ReLU()
         self.dp2 = nn.Dropout(dropout_rate)
@@ -142,8 +144,10 @@ class Noiser(nn.Module):
         self.dense3 = nn.LazyLinear(dim)
         self.tanh = nn.Tanh()
 
+        self.unflatten = nn.Unflatten(-1,(n_var,int(dim/n_var)))
+
     def forward(self, inputs):
-        output = torch.squeeze(inputs)
+        output = self.flatten(inputs)
         
         output = self.dense1(output)
         output = self.bn1(output)
@@ -158,8 +162,7 @@ class Noiser(nn.Module):
         output = self.dense3(output)
         #if self.output_activation is not None:
         output = self.tanh(output)
-        #return .1 * torch.unsqueeze(output,1)
-        return torch.unsqueeze(output,1)
+        return self.unflatten(output)
 
 
 class MLPBranch(nn.Module):
