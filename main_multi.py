@@ -139,11 +139,17 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             uni_reg = torch.sum( weights * to_add_abs) / n_batch
 
             # Group-Lasso
+            # 1) Flexible location (superposing groups)
             # g_w = n_timestamps // 6 # group width
             # groups = [(k + np.arange(g_w))%n_timestamps for k in range(n_timestamps)]
             # group_reg = 0
             # for group in groups:
             #     group_reg += torch.sum(torch.norm(to_add[...,group], dim=-1)) / n_batch
+            # uni_reg = group_reg
+            # 2) Fixed location
+            # n_groups = 6
+            # g_w = n_timestamps // n_groups # group width
+            # group_reg = torch.sum(torch.norm(to_add.unflatten(-1,(n_groups,g_w)), dim=-1)) / n_batch
             # uni_reg = group_reg
 
             # Adversarial part
@@ -162,7 +168,8 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             
             loss = 1.*loss_classif + 0.8*loss_g + .2*uni_reg # One t-tilde per variable - square dist
             # loss = 1.*loss_classif + 2*loss_g + .05*uni_reg # One t-tilde per variable - log barrier
-            # loss = 1.*loss_classif + 0.8*loss_g + 5.*group_reg # Group Lasso
+            # loss = 1.*loss_classif + 0.8*loss_g + 5.*group_reg # Group Lasso - overlapping
+            # loss = 1.*loss_classif + 0.4*loss_g + 10.*group_reg # Group Lasso - overlapping
             loss.backward()
             optimizer.step()
 
