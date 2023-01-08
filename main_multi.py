@@ -125,8 +125,26 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             diff = torch.minimum(torch.remainder(t_avg - id_temps, n_timestamps),
                                 torch.remainder(id_temps - t_avg, n_timestamps))
 
-            uni_reg = torch.sum( torch.square(diff) * to_add_abs) / n_batch
-            # uni_reg = torch.sum( torch.abs(diff) * to_add_abs) / n_batch
+            # Weights
+            # 1) Quadratic distance from \tilde{t}
+            weights = torch.square(diff)
+            # 2) Absolute distance
+            # weights = torch.abs(diff)
+            # 3) Log barrier window
+            # max_w = n_timestamps // 6
+            # eps = torch.Tensor([torch.finfo(torch.float32).eps]).to(device)
+            # eps = torch.Tensor([1e-32]).to(device)
+            # weights = -torch.log(torch.max(1 - torch.div(torch.abs(diff),max_w), eps.expand_as(diff)))
+
+            uni_reg = torch.sum( weights * to_add_abs) / n_batch
+
+            # Group-Lasso
+            # g_w = n_timestamps // 6 # group width
+            # groups = [(k + np.arange(g_w))%n_timestamps for k in range(n_timestamps)]
+            # group_reg = 0
+            # for group in groups:
+            #     group_reg += torch.sum(torch.norm(to_add[...,group], dim=-1)) / n_batch
+            # uni_reg = group_reg
 
             # Adversarial part
             real_output = discr( x_batch ).view(-1)
@@ -142,7 +160,9 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             fake_output_2 = torch.squeeze(fake_output_2)
             loss_g = generator_loss(fake_output_2, loss_bce, device)
             
-            loss = 1.*loss_classif + 0.8*loss_g + .2*uni_reg # One t-tilde per variable
+            loss = 1.*loss_classif + 0.8*loss_g + .2*uni_reg # One t-tilde per variable - square dist
+            # loss = 1.*loss_classif + 2*loss_g + .05*uni_reg # One t-tilde per variable - log barrier
+            # loss = 1.*loss_classif + 0.8*loss_g + 5.*group_reg # Group Lasso
             loss.backward()
             optimizer.step()
 
