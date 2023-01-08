@@ -69,15 +69,6 @@ def trainClassif(train_dataset,valid_dataset):
 
     return file_path
 
-def F1(pred,y): #TODO DELETE
-    labels = []
-    pred_tot = []
-    for i in range(pred.shape[0]):
-        labels.append( y[i].cpu().detach().numpy() )
-        pred_tot.append( np.argmax( pred[i].cpu().detach().numpy()) )
-    labels = np.array(labels)
-    pred_tot = np.array(pred_tot)
-    return f1_score(labels,pred_tot,average="weighted")
 
 def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer, optimizerD, loss_bce, n_timestamps, device, path_file):
     model.eval()
@@ -110,18 +101,12 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             n_batch = x_batch.shape[0]
  
             x_cf = x_batch+to_add
-            # print('CLASSIF') #TODO DELETE
             pred_cl = model(x_cf)
 
             # Classification loss
-            # print(f'F1_SCORE ORIG: {F1(model(x_batch), y_batch)}') #TODO DELETE
-            # print(f'F1_SCORE CF: {F1(pred_cl, y_batch)}') #TODO DELETE
-            # print(f'pred_cl {pred_cl.shape}') #TODO DELETE
             prob_cl = torch.nn.functional.softmax(pred_cl,dim=1)
-            # print(f'prob_cl {prob_cl.shape}') #TODO DELETE
             y_ohe = F.one_hot(y_batch.long(), num_classes=n_classes)
             prob = torch.sum(prob_cl * y_ohe,dim=1)
-            # print(f'prob {prob.shape}') #TODO DELETE
             loss_classif = torch.mean( -torch.log( 1. - prob + torch.finfo(torch.float32).eps ) )
 
             #Time-contiguity Regularizer
@@ -144,24 +129,18 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             # uni_reg = torch.sum( torch.abs(diff) * to_add_abs) / n_batch
 
             # Adversarial part
-            # print('DISCRIMINATOR') #TODO DELETE
             real_output = discr( x_batch ).view(-1)
-            # print(f'disc real {real_output.sum()}') #TODO DELETE
             fake_output = discr( x_batch + to_add.detach() ).view(-1)
-            # print(f'disc fake {fake_output.sum()}') #TODO DELETE
             # Discriminator            
             loss_d = discriminator_loss(real_output, fake_output, loss_bce, device)
-            if e % 1 == 0:
-                loss_d.backward()
+            loss_d.backward()
+            # if e % 5 == 0: # Update discriminator only every 5 iterations
+            #     loss_d.backward()
             optimizerD.step()
-            # print(f'loss_dsc {loss_d}') #TODO DELETE
             # Generator
             fake_output_2 = discr( x_cf )
-            # print(f'disc fake CF {fake_output_2.shape}') #TODO DELETE
             fake_output_2 = torch.squeeze(fake_output_2)
-            # print(f'disc fake CF {fake_output_2.sum()}') #TODO DELETE
             loss_g = generator_loss(fake_output_2, loss_bce, device)
-            # print(f'loss_g {loss_g}') #TODO DELETE
             
             loss = 1.*loss_classif + 0.8*loss_g + .2*uni_reg # One t-tilde per variable
             loss.backward()
