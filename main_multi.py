@@ -16,7 +16,7 @@ import time
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
-from model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
+from model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif, InceptionClf
 
 from main_regDiego import discriminator_loss, generator_loss, prediction, generateOrigAndAdd, extractNDVI
 
@@ -45,24 +45,32 @@ def trainModelClassif(model, train, valid, n_epochs, loss_ce, optimizer, path_fi
         
         sys.stdout.flush()
 
-def trainClassif(train_dataset,valid_dataset):
+def trainClassif(train_dataset,valid_dataset,clf_name='Inception'):
     n_classes = len(np.unique(train_dataset.tensors[1]))
+    # n_var = train_dataset.tensors[0].shape[-2]
 
     train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=16)
     valid_dataloader = DataLoader(valid_dataset, shuffle=False, batch_size=64)
     #test_dataloader = DataLoader(test_dataset, shuffle=False, batch_size=2048)
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = S2Classif(n_classes, dropout_rate=.5)
-    #model = MLPClassif(n_classes, dropout_rate=.5)
+
+    if clf_name == 'Inception':
+        model = InceptionClf(n_classes)
+        lr, w_decay = 1e-5, 1e-4 #original code: 1e-3, 0
+    else:
+        model = S2Classif(n_classes, dropout_rate=.5) #TempCNN
+        lr, w_decay = 1e-5, 1e-4
+        #model = MLPClassif(n_classes, dropout_rate=.5)
+
     model.to(device)
     
     # Train if not already done
-    file_path = "model_weights_tempCNN_Multi"    
+    file_path = "clf_weights_multivar_" + clf_name
     if os.path.exists(file_path):
         model.load_state_dict(torch.load(file_path))
     else: 
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.00001, weight_decay=1e-4)       
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=w_decay)
         loss_ce = nn.CrossEntropyLoss().to(device)
         n_epochs = 1000
         trainModelClassif(model, train_dataloader, valid_dataloader, n_epochs, loss_ce, optimizer, file_path, device)
@@ -139,7 +147,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             uni_reg = torch.sum( weights * to_add_abs) / n_batch
 
             # Group-Lasso
-            # 1) Flexible location (superposing groups)
+            # 1) Flexible location (overlapping groups)
             # g_w = n_timestamps // 6 # group width
             # groups = [(k + np.arange(g_w))%n_timestamps for k in range(n_timestamps)]
             # group_reg = 0
@@ -151,6 +159,13 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             # g_w = n_timestamps // n_groups # group width
             # group_reg = torch.sum(torch.norm(to_add.unflatten(-1,(n_groups,g_w)), dim=-1)) / n_batch
             # uni_reg = group_reg
+            # 3) Fully flexible
+            # group_reg = 0
+            # for k in range(1,n_timestamps+1):
+            #     weight = torch.pow(0.5, torch.flip(torch.arange(k),[0])).to(device).expand_as(to_add[...,:k])
+            #     group_reg += torch.sum(torch.norm(weight*to_add[...,:k],dim=-1) + torch.norm(weight*to_add[...,-k:],dim=-1))
+            # uni_reg = group_reg
+
 
             # Adversarial part
             real_output = discr( x_batch ).view(-1)
@@ -168,8 +183,9 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             
             loss = 1.*loss_classif + 0.8*loss_g + .2*uni_reg # One t-tilde per variable - square dist
             # loss = 1.*loss_classif + 2*loss_g + .05*uni_reg # One t-tilde per variable - log barrier
-            # loss = 1.*loss_classif + 0.8*loss_g + 5.*group_reg # Group Lasso - overlapping
-            # loss = 1.*loss_classif + 0.4*loss_g + 10.*group_reg # Group Lasso - overlapping
+            # loss = 1.*loss_classif + 0.8*loss_g + 15.*group_reg # Group Lasso - overlapping
+            # loss = 1.*loss_classif + 0.4*loss_g + 10.*group_reg # Group Lasso - fixed
+            # loss = 1.*loss_classif + 0.5*loss_g + 0.07*group_reg # Group Lasso - fully flexible
             loss.backward()
             optimizer.step()
 
@@ -249,7 +265,7 @@ def trainNoiser(train_dataset, file_path):
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = S2Classif(n_classes, dropout_rate = .5)
-    noiser = Noiser(n_timestamps*n_var, .3, n_var)
+    noiser = Noiser(n_timestamps*n_var, .3, n_var, shrink=True)
     discr = Discr(.2)
     model.to(device)
     noiser.to(device)
