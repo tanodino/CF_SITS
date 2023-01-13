@@ -16,14 +16,14 @@ import time
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
-from model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif, InceptionClf
+from model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif, Inception, LSTMFCN
 
 from main_regDiego import discriminator_loss, generator_loss, prediction, generateOrigAndAdd, extractNDVI
 
 def trainModelClassif(model, train, valid, n_epochs, loss_ce, optimizer, path_file, device):
-    model.train()
     best_validation = 0
     for e in range(n_epochs):
+        model.train()        
         loss_acc = []
         for x_batch, y_batch in train:
             model.zero_grad()
@@ -47,6 +47,7 @@ def trainModelClassif(model, train, valid, n_epochs, loss_ce, optimizer, path_fi
 
 def trainClassif(train_dataset,valid_dataset,clf_name='Inception'):
     n_classes = len(np.unique(train_dataset.tensors[1]))
+    n_timestamps = train_dataset.tensors[0].shape[-1]
     # n_var = train_dataset.tensors[0].shape[-2]
 
     train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=16)
@@ -56,7 +57,8 @@ def trainClassif(train_dataset,valid_dataset,clf_name='Inception'):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     if clf_name == 'Inception':
-        model = InceptionClf(n_classes)
+        # model = Inception(n_classes)
+        model, clf_name = LSTMFCN(n_classes, n_timestamps), 'LSTM-FCN'
         lr, w_decay = 1e-5, 1e-4 #original code: 1e-3, 0
     else:
         model = S2Classif(n_classes, dropout_rate=.5) #TempCNN
@@ -67,15 +69,15 @@ def trainClassif(train_dataset,valid_dataset,clf_name='Inception'):
     
     # Train if not already done
     file_path = "clf_weights_multivar_" + clf_name
-    if os.path.exists(file_path):
-        model.load_state_dict(torch.load(file_path))
-    else: 
+    if not os.path.exists(file_path):
         optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=w_decay)
         loss_ce = nn.CrossEntropyLoss().to(device)
         n_epochs = 1000
         trainModelClassif(model, train_dataloader, valid_dataloader, n_epochs, loss_ce, optimizer, file_path, device)
+    
+    model.load_state_dict(torch.load(file_path))
 
-    return file_path
+    return file_path, model
 
 
 def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer, optimizerD, loss_bce, n_timestamps, device, path_file):
@@ -256,7 +258,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
         torch.save(noiser.state_dict(), path_file)
         sys.stdout.flush()
 
-def trainNoiser(train_dataset, file_path):
+def trainNoiser(train_dataset, file_path, model):
     n_timestamps = train_dataset.tensors[0].shape[-1]
     n_var = train_dataset.tensors[0].shape[-2]
     n_classes = len(np.unique(train_dataset.tensors[1]))
@@ -264,10 +266,10 @@ def trainNoiser(train_dataset, file_path):
     train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=128)
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = S2Classif(n_classes, dropout_rate = .5)
+    # model = S2Classif(n_classes, dropout_rate = .5)
     noiser = Noiser(n_timestamps*n_var, .3, n_var, shrink=True)
     discr = Discr(.2)
-    model.to(device)
+    # model.to(device)
     noiser.to(device)
     discr.to(device)
     
@@ -313,8 +315,8 @@ def main(argv):
     #test_dataset = TensorDataset(x_test, y_test) # create your datset
     valid_dataset = TensorDataset(x_valid, y_valid) # create your datset
 
-    file_path = trainClassif(train_dataset,valid_dataset)
-    trainNoiser(train_dataset,file_path)
+    file_path, clf = trainClassif(train_dataset,valid_dataset)
+    trainNoiser(train_dataset,file_path,clf)
 
     #print( model.parameters() )    
 

@@ -3,14 +3,83 @@ import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
 
-class Inception(nn.Module):
+class LSTMFCN(nn.Module):
+    # PyTorch translation of the Keras code in https://github.com/sktime and https://github.com/houshd/MLSTM-FCN
+    def __init__(self, nb_classes, dim, dropout=0.8, kernel_sizes=(8,5,3),
+                 filter_sizes=(128, 256, 128), lstm_size=8, attention=False):
+        super(LSTMFCN, self).__init__()
+
+        # self.attention = attention
+
+        self.LSTM = nn.LSTM(dim, lstm_size, batch_first=True)
+        self.dropout = nn.Dropout(dropout)
+
+        conv_layers = []
+        for i in range(len(filter_sizes)):
+            conv_layers.append(nn.LazyConv1d(filter_sizes[0], kernel_sizes[0], padding="same")) # keras: kernel_initializer="he_uniform"
+            conv_layers.append(nn.BatchNorm1d(filter_sizes[0]))
+            conv_layers.append(nn.ReLU())
+        #TODO add the SqueezeExciteBlocks at every layer except the last one
+
+        self.conv_layers = nn.Sequential(*conv_layers)
+
+        self.gap = nn.AdaptiveAvgPool1d(1)
+        self.fc = nn.Sequential(
+            nn.Flatten(),
+            nn.LazyLinear(nb_classes),
+            nn.Softmax(dim=1)
+        )
+
+    def forward(self, input):
+        # Dimension shuffle: input.permute(0,2,1)
+        # Unecessary, since LSTM already takes (batch, seq, feature) reversed wrt to our input (batch, var, time), and also wrt the conv1d convention. 
+        # We want to give all timesteps to LSTM at each step (as proposed in the paper).
+        whole_seq_output, _ = self.LSTM(input) 
+        x = whole_seq_output[:,-1,:] # Take only last time step of size (batch, lstm_size), as pytorch returns the whole sequence
+        x = self.dropout(x)
+
+        y = self.conv_layers(input)
+        y = self.gap(y)
+
+        output = torch.cat((x,torch.squeeze(y)),dim=1)
+        return self.fc(output)
+
+class SqueezeExciteBlock(nn.Module):
+    def __init__(self, input_channels):
+        super(SqueezeExciteBlock, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool1d(1)
+        self.fc1 = nn.Linear(input_channels, input_channels // 16)
+        self.fc2 = nn.Linear(input_channels // 16, input_channels)
+
+    def forward(self, x):
+        x_se = self.avg_pool(x)
+        x_se = x_se.view(x_se.size(0), -1)
+        x_se = F.relu(self.fc1(x_se))
+        x_se = torch.sigmoid(self.fc2(x_se))
+        x_se = x_se.view(x_se.size(0), -1, 1)
+        x = x * x_se
+        return x
+
+#Keras
+# def squeeze_excite_block(input):
+#     filters = input._keras_shape[-1] 
+
+#     se = GlobalAveragePooling1D()(input)
+#     se = Reshape((1, filters))(se)
+#     se = Dense(filters // 16,  activation='relu', kernel_initializer='he_normal', use_bias=False)(se)
+#     se = Dense(filters, activation='sigmoid', kernel_initializer='he_normal', use_bias=False)(se)
+#     se = multiply([input, se])
+#     return se
+
+class InceptionLayer(nn.Module):
     # PyTorch translation of the Keras code in https://github.com/hfawaz/dl-4-tsc
     def __init__(self, nb_filters=32, use_bottleneck=True,
                  bottleneck_size=32, kernel_size=41):
-        super(Inception, self).__init__()
+        super(InceptionLayer, self).__init__()
 
         # self.in_channels = in_channels
         kernel_size_s = [(kernel_size-1) // (2 ** i) for i in range(3)] # = [40, 20, 10]
+        kernel_size_s = [x+1 for x in kernel_size_s] # Avoids warning about even kernel_size with padding="same"
         self.bottleneck_size = bottleneck_size
         self.use_bottleneck = use_bottleneck
 
@@ -50,26 +119,26 @@ class Inception(nn.Module):
         return output
 
 
-class InceptionClf(nn.Module):
+class Inception(nn.Module):
     # PyTorch translation of the Keras code in https://github.com/hfawaz/dl-4-tsc
     def __init__(self, nb_classes, nb_filters=32, use_residual=True,
                  use_bottleneck=True, bottleneck_size=32, depth=6, kernel_size=41):
-        super(InceptionClf, self).__init__()
+        super(Inception, self).__init__()
 
         self.use_residual = use_residual
 
         # Inception layers
         self.inception_list = nn.ModuleList(
-            [Inception(nb_filters,use_bottleneck, bottleneck_size, kernel_size) for _ in range(depth)])
+            [InceptionLayer(nb_filters,use_bottleneck, bottleneck_size, kernel_size) for _ in range(depth)])
         # Explicit input sizes (i.e. without using Lazy layers). Requires n_var passed as a constructor input
-        # self.inception_list = nn.ModuleList([Inception(n_var, nb_filters,use_bottleneck, bottleneck_size, kernel_size) for _ in range(depth)])
+        # self.inception_list = nn.ModuleList([InceptionLayer(n_var, nb_filters,use_bottleneck, bottleneck_size, kernel_size) for _ in range(depth)])
         # for _ in range(1,depth):
-        #     inception = Inception(4*nb_filters,nb_filters,use_bottleneck, bottleneck_size, kernel_size)
+        #     inception = InceptionLayer(4*nb_filters,nb_filters,use_bottleneck, bottleneck_size, kernel_size)
         #     self.inception_list.append(inception)
 
         # Fully-connected layer
         self.gap = nn.AdaptiveAvgPool1d(1)
-        self.linear = nn.Sequential(
+        self.fc = nn.Sequential(
             nn.Flatten(),
             nn.LazyLinear(nb_classes),
             nn.Softmax(dim=1)
@@ -104,7 +173,7 @@ class InceptionClf(nn.Module):
                 input_res = x
 
         gap_layer = self.gap(x)
-        return self.linear(gap_layer)
+        return self.fc(gap_layer)
 
 
 class S2Branch(nn.Module):
@@ -156,13 +225,11 @@ class S2Branch(nn.Module):
         output3 = self.relu3(output3)
         output3 = self.dp3(output3)
 
-        #print("output1 ",output1.shape)
         output = self.gap(output3)
         #output = self.flatten(output3)
-        #print("output.shape ",output.shape)
-        return torch.squeeze(output)
-        #print("output.shape ",output.shape)
         #return output
+        return torch.squeeze(output)
+
 
 
 
@@ -326,30 +393,21 @@ class CNN2DBranch(nn.Module):
         output = self.bn1(output)
         output = self.relu1(output)
         output = self.dp1(output)
-        #print(output.shape)
-        #print(output.shape)
 
         output = self.conv2(output)
         output = self.bn2(output)
         output = self.relu2(output)
         output = self.dp2(output)
-        #print(output.shape)
 
         output = self.conv3(output)
         output = self.bn3(output)
         output = self.relu3(output)
         output = self.dp3(output)
-        #print(output.shape)
 
         output = self.flatten(output)
-        #print(output.shape)
         #output = F.adaptive_avg_pool2d(output, (1, 1))
         #output = F.adaptive_max_pool2d(output, (1, 1))
         #output = output.squeeze()
-        #print("GAP.shape ",output.shape)
-        #exit()
-        #print(output.shape)
-        #exit()
         return output
 
 
