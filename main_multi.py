@@ -44,6 +44,8 @@ def trainModelClassif(model, train, valid, n_epochs, loss_ce, optimizer, path_fi
             print("\t\t BEST VALID %f"%score_valid)
         
         sys.stdout.flush()
+    
+    print("\t\t BEST OVERALL VALID %f"%score_valid)
 
 def trainClassif(train_dataset,valid_dataset,clf_name='Inception'):
     n_classes = len(np.unique(train_dataset.tensors[1]))
@@ -57,8 +59,8 @@ def trainClassif(train_dataset,valid_dataset,clf_name='Inception'):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     if clf_name == 'Inception':
-        # model = Inception(n_classes)
-        model, clf_name = LSTMFCN(n_classes, n_timestamps), 'LSTM-FCN'
+        model = Inception(n_classes)
+        # model, clf_name = LSTMFCN(n_classes, n_timestamps), 'LSTM-FCN'
         lr, w_decay = 1e-5, 1e-4 #original code: 1e-3, 0
     else:
         model = S2Classif(n_classes, dropout_rate=.5) #TempCNN

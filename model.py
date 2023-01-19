@@ -19,7 +19,8 @@ class LSTMFCN(nn.Module):
             conv_layers.append(nn.LazyConv1d(filter_sizes[0], kernel_sizes[0], padding="same")) # keras: kernel_initializer="he_uniform"
             conv_layers.append(nn.BatchNorm1d(filter_sizes[0]))
             conv_layers.append(nn.ReLU())
-        #TODO add the SqueezeExciteBlocks at every layer except the last one
+            if i < len(filter_sizes):
+                conv_layers.append(SqueezeExciteBlock(filter_sizes[i]))
 
         self.conv_layers = nn.Sequential(*conv_layers)
 
@@ -27,7 +28,7 @@ class LSTMFCN(nn.Module):
         self.fc = nn.Sequential(
             nn.Flatten(),
             nn.LazyLinear(nb_classes),
-            nn.Softmax(dim=1)
+            # nn.Softmax(dim=1) # already performed inside CrossEntropyLoss
         )
 
     def forward(self, input):
@@ -60,25 +61,15 @@ class SqueezeExciteBlock(nn.Module):
         x = x * x_se
         return x
 
-#Keras
-# def squeeze_excite_block(input):
-#     filters = input._keras_shape[-1] 
-
-#     se = GlobalAveragePooling1D()(input)
-#     se = Reshape((1, filters))(se)
-#     se = Dense(filters // 16,  activation='relu', kernel_initializer='he_normal', use_bias=False)(se)
-#     se = Dense(filters, activation='sigmoid', kernel_initializer='he_normal', use_bias=False)(se)
-#     se = multiply([input, se])
-#     return se
 
 class InceptionLayer(nn.Module):
     # PyTorch translation of the Keras code in https://github.com/hfawaz/dl-4-tsc
     def __init__(self, nb_filters=32, use_bottleneck=True,
-                 bottleneck_size=32, kernel_size=41):
+                 bottleneck_size=32, kernel_size=40):
         super(InceptionLayer, self).__init__()
 
         # self.in_channels = in_channels
-        kernel_size_s = [(kernel_size-1) // (2 ** i) for i in range(3)] # = [40, 20, 10]
+        kernel_size_s = [(kernel_size) // (2 ** i) for i in range(3)] # = [40, 20, 10]
         kernel_size_s = [x+1 for x in kernel_size_s] # Avoids warning about even kernel_size with padding="same"
         self.bottleneck_size = bottleneck_size
         self.use_bottleneck = use_bottleneck
@@ -141,7 +132,7 @@ class Inception(nn.Module):
         self.fc = nn.Sequential(
             nn.Flatten(),
             nn.LazyLinear(nb_classes),
-            nn.Softmax(dim=1)
+            # nn.Softmax(dim=1) # already performed inside CrossEntropyLoss
         )
 
         # Shortcut layers
