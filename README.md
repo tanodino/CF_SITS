@@ -21,14 +21,14 @@ Files concerning this part:
 ## Noiser application
 Files concerning this part:
 - `reject_option.py`: loads model and noiser, creates CF examples, computes accuracy
-- [FAILED] `DataAugmentation.py`:  an attempt to improve the base classifier by reuse generated CF samples as data agumentation.
+- [FAILED] `DataAugmentation.py`:  an attempt to improve the base classifier by reuse generated CF samples as data augmentation.
 
 ## Result analysis
 Files concerning this part:
 - `ExtractCF.py`: generates several results presented in the paper (chord graph, perturbation examples, average perturbation) and some not yet included (PCA)
-- `IF_evaluation.py`: plausability study (via Isolation forest)
+- `IF_evaluation.py`: plausibility study (via Isolation forest)
 - `plot_time_line.py` : plots a timeline based on `dates.txt`
-- [DEPRECATED?] `generateCF.py` : loads model and noiser, computes predictions and CFs, then produces the corresponding chord diagram linking OG and CF classes.
+- [DEPRECATED?] `generateCF.py` : loads model and noiser, computes predictions and CFs, then prints the class transitions as matrix.
 
 ## Geral use files
 ### Reusable python modules
