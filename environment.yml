@@ -12,4 +12,7 @@ dependencies:
   - torchaudio=0.12.1
   - torchvision=0.13.1
   - cudatoolkit=11.3
+  - pip:
+    - mpl-chord-diagram
+    - chord
 
