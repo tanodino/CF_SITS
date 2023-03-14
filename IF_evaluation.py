@@ -11,6 +11,7 @@ from sklearn.manifold import TSNE
 from sklearn.metrics import normalized_mutual_info_score
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.metrics import accuracy_score
+from sklearn.ensemble import IsolationForest
 
 from torch.utils.data import TensorDataset, DataLoader
 
@@ -24,77 +25,13 @@ from matplotlib.ticker import PercentFormatter
 import seaborn as sns
 import pandas as pd
 
-from model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
+from cfsits_tools.model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
+from cfsits_tools.utils import generateCF, applyIF
+from cfsits_tools.viz import plotConfusionMatrix, plotContingencyMatrix
+from cfsits_tools.data import loadSplitNpy, extractNDVI
 
-from sklearn.ensemble import IsolationForest
-
-def generateCF(noiser, loader, device):
-    dataCF = []
-    noiser.eval()
-    for x_batch in loader:
-        x_batch = x_batch[0]
-        x_batch = x_batch.to(device)
-        to_add = noiser(x_batch)
-        #print(x_batch.shape)
-        #print(to_add.shape)
-        dataCF.append( (x_batch+to_add).cpu().detach().numpy() )
-    return np.concatenate(dataCF,axis=0)
-
-
-
-def applyIF(clf, x_test):
-    pred = clf.predict(x_test) + 1
-    pred[np.where(pred == 2)] = 1
-    pred = pred.astype("int")
-    return pred
-
-def extractNDVI(x_train):
-    eps = np.finfo(np.float32).eps
-    red = x_train[:,2,:]
-    nir = x_train[:,3,:]
-    temp_data = (nir - red ) / ( (nir + red) + eps )
-    return np.expand_dims(temp_data, 1)
-
-def plotConfusionMatrix(cm, title, filename, vmax=False, figsize=(2.8,2.1)):
-    _, ax = plt.subplots(figsize=figsize)
-    cmd_obj = ConfusionMatrixDisplay(cm, display_labels=['Inlier', 'Outlier'])
-    cmd_obj.plot(colorbar=False,cmap='Oranges',ax=ax)
-    cmd_obj.ax_.set(title= title,
-                    xlabel='Counterfactual', 
-                    ylabel='Real')
-    if vmax:
-        for im in ax.get_images(): # set clim manually (to match with ablated model)
-            im.set_clim(vmin=1,vmax=vmax)
-
-    # Save figure
-    output_folder = 'img/IF_evaluation/'
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-    plt.savefig(output_folder + filename, bbox_inches = "tight")
-
-def plotContingencyMatrix(cm, cm_norm, title, filename, figsize=(2.1,2.1)):
-    classes = ['Inlier', 'Outlier']
-    annot = np.empty_like(cm).astype(str)
-    nrows, ncols = cm.shape
-    for i in range(nrows):
-        for j in range(ncols):
-            annot[i, j] = '%.1f%%\n(%d)' % (cm_norm[i, j]*100, cm[i, j])
-    cm_norm = pd.DataFrame(cm_norm)
-    cm_norm = cm_norm * 100
-    cm_norm.index.name = 'Real'
-    cm_norm.columns.name = 'Counterfactual'
-    _, ax = plt.subplots(figsize=figsize)
-    plt.yticks(va='center')
-    plt.title(title)
-
-    sns.heatmap(cm_norm, annot=annot, fmt='', ax=ax, xticklabels=classes, cbar=False,
-                cbar_kws={'format':PercentFormatter()}, yticklabels=classes, cmap="Oranges")
-
-    # Save figure
-    output_folder = 'img/IF_evaluation/'
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-    plt.savefig(output_folder + filename, bbox_inches = "tight")    
+MODEL_DIR = 'models'
+DATA_DIR = 'data'
 
 def main(argv):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -104,20 +41,16 @@ def main(argv):
     print('\n=========\nManual seed activated for reproducibility\n=========')
 
     year = 2020
-    x_train = np.load("x_train_%d.npy"%year)
-    x_test = np.load("x_test_%d.npy"%year)
-
-    x_train = np.moveaxis(x_train,(0,1,2),(0,2,1))
-    x_test = np.moveaxis(x_test,(0,1,2),(0,2,1))
-
-    x_train = extractNDVI(x_train)
-    x_test = extractNDVI(x_test)
+    x_train, y_train = loadSplitNpy('train', DATA_DIR, year)
+    x_valid, y_valid = loadSplitNpy('valid', DATA_DIR, year)
+    x_test, y_test = loadSplitNpy('test', DATA_DIR, year)
 
     n_timestamps = x_train.shape[-1]
 
     noiser = Noiser(n_timestamps, .3)
     noiser = noiser.to(device)
     path_file_noiser = "noiser_weights"
+    path_file_noiser = os.path.join(MODEL_DIR, path_file_noiser)
     noiser.load_state_dict(torch.load(path_file_noiser))
 
     x_test_pytorch = torch.Tensor(x_test)

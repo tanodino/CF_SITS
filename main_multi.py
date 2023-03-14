@@ -16,9 +16,13 @@ import time
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
-from model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif, Inception, LSTMFCN
+from cfsits_tools.model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif, Inception, LSTMFCN
+from cfsits_tools.loss import discriminator_loss, generator_loss
+from cfsits_tools.utils import evaluate, generateOrigAndAdd
+from cfsits_tools.data import loadSplitNpy, extractNDVI
 
-from main_regDiego import discriminator_loss, generator_loss, prediction, generateOrigAndAdd, extractNDVI
+MODEL_DIR = 'models'
+DATA_DIR = 'data'
 
 def trainModelClassif(model, train, valid, n_epochs, loss_ce, optimizer, path_file, device):
     best_validation = 0
@@ -36,7 +40,7 @@ def trainModelClassif(model, train, valid, n_epochs, loss_ce, optimizer, path_fi
             loss_acc.append( loss.cpu().detach().numpy() )
         
         print("epoch %d with loss %f"%(e, np.mean(loss_acc)))
-        score_valid = prediction(model, valid, device)
+        score_valid = evaluate(model, valid, device)
         print("\t val on VALIDATION %f"%score_valid)
         if score_valid > best_validation:
             best_validation = score_valid
@@ -295,13 +299,9 @@ def main(argv):
     torch.manual_seed(0)
     print('\n=========\nManual seed activated for reproducibility\n=========')
 
-    x_train = np.load("x_train_%d.npy"%year)
-    x_valid = np.load("x_valid_%d.npy"%year)
-    x_train = np.moveaxis(x_train,(0,1,2),(0,2,1))
-    x_valid = np.moveaxis(x_valid,(0,1,2),(0,2,1))
-
-    y_train = np.load("y_train_%d.npy"%year)-1.
-    y_valid = np.load("y_valid_%d.npy"%year)-1.
+    x_train, y_train = loadSplitNpy('train', DATA_DIR, year, ndvi=False)
+    x_valid, y_valid = loadSplitNpy('valid', DATA_DIR, year, ndvi=False)
+    x_test, y_test = loadSplitNpy('test', DATA_DIR, year, ndvi=False)
 
     # Commented so that we have multivariate time series (4 channels)
     # x_train = extractNDVI(x_train)

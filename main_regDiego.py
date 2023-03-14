@@ -19,75 +19,19 @@ import torch.nn.functional as F
 #matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
-from model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
-
+from cfsits_tools.model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
+from cfsits_tools.loss import discriminator_loss, generator_loss
+from cfsits_tools.utils import generateOrigAndAdd
+from cfsits_tools.data import loadSplitNpy, extractNDVI
 #torch.save(model.state_dict(), PATH)
 
 #model = TheModelClass(*args, **kwargs)
 #model.load_state_dict(torch.load(PATH))
 #model.eval()
 
-def discriminator_loss(real_output, fake_output, loss_bce, device):
-    #real_labels = torch.full((real_output.shape[0],), 1., dtype=torch.float, device=device)
-    #fake_labels = torch.full((fake_output.shape[0],), 0., dtype=torch.float, device=device)
-    real_labels = torch.Tensor([1.] * real_output.shape[0]).to(device)
-    fake_labels = torch.Tensor([0.] * fake_output.shape[0]).to(device)
-    #print("real_output ",real_output)
-    #print("fake_output ",fake_output)
-
-    real_loss = loss_bce(real_output, real_labels)
-    fake_loss = loss_bce(fake_output, fake_labels)
-    total_loss = (real_loss + fake_loss ) /2
-    return total_loss
-
-
-def generator_loss(fake_output, loss_bce, device):
-    #real_labels = torch.full((fake_output.shape[0],), 1., dtype=torch.float, device=device)
-    real_labels = torch.Tensor([1.] * fake_output.shape[0]).to(device)
-    return loss_bce(fake_output, real_labels)
-
-
-def prediction(model, valid, device):
-    labels = []
-    pred_tot = []
-    model.eval()
-    for x, y in valid:
-        labels.append( y.cpu().detach().numpy() )
-        x = x.to(device)
-        pred = model(x)
-        pred_tot.append( np.argmax( pred.cpu().detach().numpy() ,axis=1) )
-    labels = np.concatenate(labels, axis=0)
-    pred_tot = np.concatenate(pred_tot, axis=0)
-    return f1_score(labels,pred_tot,average="weighted")
-
-def generateOrigAndAdd(model, noiser, train, device):
-    data = []
-    dataCF = []
-    prediction_cf = []
-    prediction = []
-    orig_label = []
-    model.eval()
-    noiser.eval()
-    for x_batch, y_batch in train:
-        x_batch = x_batch.to(device)
-        to_add = noiser(x_batch)
-        pred_cf = model(x_batch+to_add)
-        pred = model(x_batch)
-        data.append(x_batch.cpu().detach().numpy())
-        dataCF.append(x_batch.cpu().detach().numpy()+ to_add.cpu().detach().numpy())
-        prediction_cf.append( np.argmax( pred_cf.cpu().detach().numpy(),axis=1) )
-        prediction.append( np.argmax( pred.cpu().detach().numpy(),axis=1) )
-        orig_label.append( y_batch.cpu().detach().numpy() )
-    return np.concatenate(data,axis=0), np.concatenate(dataCF,axis=0), np.concatenate(prediction,axis=0), np.concatenate(prediction_cf,axis=0), np.concatenate(orig_label,axis=0)
-
-def computeOrig2pred(orig_label, pred):
-    classes = np.unique(orig_label)
-    n_classes = len( classes )
-    hashOrig2Pred = {}
-    for v in classes:
-        idx = np.where(orig_label == v)[0]
-        hashOrig2Pred[v] = np.bincount( pred[idx], minlength=n_classes )
-    return hashOrig2Pred
+MODEL_DIR = 'models'
+DATA_DIR = 'data'
+LOG_DIR = os.path.join('logs', os.path.basename(os.path.splitext(__file__)[0]))
 
 def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer, optimizerD, loss_bce, n_timestamps, device, path_file):
     model.eval()
@@ -287,12 +231,12 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
         plt.clf()
         t_avg_all = np.concatenate(t_avg_all,axis=0)
         plt.hist(t_avg_all.squeeze(), bins=np.concatenate(([-.5],np.arange(n_timestamps))))
-        plt.savefig("epoch_%d_t_avg_hist.jpg"%(e) )
+        plt.savefig(os.path.join(LOG_DIR, "epoch_%d_t_avg_hist.jpg"%(e) ))
 
         plt.clf()
         plt.plot(np.arange(len(sample)), sample,'b')
         plt.plot(np.arange(len(sampleCF)), sampleCF,'r')
-        plt.savefig("epoch_%d_from_cl_%d_2cl_%d.jpg"%(e, ex_cl, ex_cfcl) )
+        plt.savefig(os.path.join(LOG_DIR, "epoch_%d_from_cl_%d_2cl_%d.jpg"%(e, ex_cl, ex_cfcl) ))
         #plt.waitforbuttonpress(0) # this will wait for indefinite time
         #plt.close(fig)
         #exit()
@@ -300,52 +244,23 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
         sys.stdout.flush()
 
 
-def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, device):
-    model.train()
-    best_validation = 0
-    for e in range(n_epochs):
-        loss_acc = []
-        for x_batch, y_batch in train:
-            model.zero_grad()
-            x_batch = x_batch.to(device)
-            y_batch = y_batch.to(device)
-            pred = model(x_batch)
-            loss = loss_ce(pred, y_batch.long())
-            loss.backward()
-            optimizer.step()
-            loss_acc.append( loss.cpu().detach().numpy() )
-        
-        print("epoch %d with loss %f"%(e, np.mean(loss_acc)))
-        score_valid = prediction(model, valid, device)
-        if score_valid > best_validation:
-            best_validation = score_valid
-            torch.save(model.state_dict(), path_file)
-            print("\t\t BEST VALID %f"%score_valid)
-        
-        sys.stdout.flush()
-
-def extractNDVI(x_train):
-    eps = np.finfo(np.float32).eps
-    red = x_train[:,2,:]
-    nir = x_train[:,3,:]
-    temp_data = (nir - red ) / ( (nir + red) + eps )
-    return np.expand_dims(temp_data, 1)
 
 def main(argv):
     year = 2020#int(argv[1])
 
+
+    os.makedirs(LOG_DIR, exist_ok=True)
+
     torch.manual_seed(0)
     print('\n=========\nManual seed activated for reproducibility\n=========')
 
-    x_train = np.load("x_train_%d.npy"%year)
-    x_valid = np.load("x_valid_%d.npy"%year)
-    x_train = np.moveaxis(x_train,(0,1,2),(0,2,1))
-    x_valid = np.moveaxis(x_valid,(0,1,2),(0,2,1))
+    x_train, y_train = loadSplitNpy('train', DATA_DIR, year)
+    x_valid, y_valid = loadSplitNpy('valid', DATA_DIR, year)
+    x_test, y_test = loadSplitNpy('test', DATA_DIR, year)
 
     print(x_train.shape)
     
-    y_train = np.load("y_train_%d.npy"%year)-1.
-    y_valid = np.load("y_valid_%d.npy"%year)-1.
+
 
     n_classes = len(np.unique(y_train))
 
@@ -358,8 +273,6 @@ def main(argv):
     print(x_train.shape)
     #exit()
 
-    x_train = extractNDVI(x_train)
-    x_valid = extractNDVI(x_valid)
 
     n_timestamps = x_train.shape[-1]
     
@@ -401,11 +314,13 @@ def main(argv):
     #file_path = "model_weights"
     file_path = "model_weights_tempCNN"
     #file_path = "model_weights"
+    file_path = os.path.join(MODEL_DIR, file_path)
     model.load_state_dict(torch.load(file_path))
     for p in model.parameters():
         p.requires_grad = False
 
     path_file_noiser = "noiser_weights"
+    path_file_noiser = os.path.join(MODEL_DIR, path_file_noiser)
     #trainModel(model, train_dataloader, valid_dataloader, n_epochs, loss_ce, optimizer, file_path, device)
     trainModelNoise(model, noiser, discr, train_dataloader, n_epochs, n_classes, optimizer, optimizerD, loss_bce, n_timestamps, device, path_file_noiser)
     

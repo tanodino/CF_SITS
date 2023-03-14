@@ -5,6 +5,7 @@ Thanks to:
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import random
+import os
 
 import pandas as pd
 import random
@@ -12,6 +13,9 @@ import numpy as np
 import matplotlib.colors as mcolors
 
 import matplotlib.pyplot as plt
+
+MODEL_DIR = 'models'
+DATA_DIR = 'data'
 
 def read_date(filename):
     dates = []
@@ -31,7 +35,7 @@ def gen_rand_date():
     return pd.to_datetime('%s-%s-%s' % (year, month, day))
 
 
-fileName = "dates.txt"
+fileName = os.path.join(DATA_DIR, "dates.txt")
 dates = read_date(fileName)
 #print(ddd)
 #exit()
@@ -159,7 +163,7 @@ ax.scatter(
     linewidth=1,
     alpha=1.)
 
-plt.savefig("prova.png")
+plt.savefig("img/prova.png")
 
 '''
 for idx, row_data in data.iterrows():

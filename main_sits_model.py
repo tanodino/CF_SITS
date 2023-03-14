@@ -18,7 +18,9 @@ import torch.nn.functional as F
 #matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
-from model import S2Classif, MLPClassif
+from cfsits_tools.model import S2Classif, MLPClassif
+from cfsits_tools.utils import trainModel
+from cfsits_tools.data import loadSplitNpy, extractNDVI
 
 #torch.save(model.state_dict(), PATH)
 
@@ -26,67 +28,22 @@ from model import S2Classif, MLPClassif
 #model.load_state_dict(torch.load(PATH))
 #model.eval()
 
-def prediction(model, valid, device):
-    labels = []
-    pred_tot = []
-    model.eval()
-    for x, y in valid:
-        labels.append( y.cpu().detach().numpy() )
-        x = x.to(device)
-        pred = model(x)
-        pred_tot.append( np.argmax( pred.cpu().detach().numpy() ,axis=1) )
-    labels = np.concatenate(labels, axis=0)
-    pred_tot = np.concatenate(pred_tot, axis=0)
-    return f1_score(labels,pred_tot,average="weighted")
-
-def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, device):
-    model.train()
-    best_validation = 0
-    for e in range(n_epochs):
-        loss_acc = []
-        for x_batch, y_batch in train:
-            model.zero_grad()
-            x_batch = x_batch.to(device)
-            y_batch = y_batch.to(device)
-            pred = model(x_batch)
-            loss = loss_ce(pred, y_batch.long())
-            loss.backward()
-            optimizer.step()
-            loss_acc.append( loss.cpu().detach().numpy() )
-        
-        print("epoch %d with loss %f"%(e, np.mean(loss_acc)))
-        score_valid = prediction(model, valid, device)
-        print("\t val on VALIDATION %f"%score_valid)
-        if score_valid > best_validation:
-            best_validation = score_valid
-            torch.save(model.state_dict(), path_file)
-            print("\t\t BEST VALID %f"%score_valid)
-        
-        sys.stdout.flush()
-
-def extractNDVI(x_train):
-    eps = np.finfo(np.float32).eps
-    red = x_train[:,2,:]
-    nir = x_train[:,3,:]
-    temp_data = (nir - red ) / ( (nir + red) + eps )
-    return np.expand_dims(temp_data, 1)
+MODEL_DIR = 'models'
+DATA_DIR = 'data'
 
 def main(argv):
     year = 2020#int(argv[1])
+    
+    x_train, y_train = loadSplitNpy('train', DATA_DIR, year)
+    x_valid, y_valid = loadSplitNpy('valid', DATA_DIR, year)
+    x_test, y_test = loadSplitNpy('test', DATA_DIR, year)
+    
 
-    x_train = np.load("x_train_%d.npy"%year)
-    x_valid = np.load("x_valid_%d.npy"%year)
-    x_train = np.moveaxis(x_train,(0,1,2),(0,2,1))
-    x_valid = np.moveaxis(x_valid,(0,1,2),(0,2,1))
-
-    y_train = np.load("y_train_%d.npy"%year)-1.
-    y_valid = np.load("y_valid_%d.npy"%year)-1.
 
     n_classes = len(np.unique(y_train))
     print(x_train.shape)
 
-    x_train = extractNDVI(x_train)
-    x_valid = extractNDVI(x_valid)
+
 
     n_timestamps = x_train.shape[-1]
     
@@ -116,6 +73,7 @@ def main(argv):
     n_epochs = 1000
     file_path = "model_weights_tempCNN"
     #file_path = "model_weights"
+    file_path = os.path.join(MODEL_DIR, file_path)
     trainModel(model, train_dataloader, valid_dataloader, n_epochs, loss_ce, optimizer, file_path, device)    
 
 

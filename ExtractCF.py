@@ -24,8 +24,13 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from matplotlib import colors
 
-from model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
+from cfsits_tools.model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
+from cfsits_tools.utils import computeOrig2pred, predictionAndCF
+from cfsits_tools.viz import saveFig
+from cfsits_tools.data import loadSplitNpy, extractNDVI
 
+MODEL_DIR = 'models'
+DATA_DIR = 'data'
 
 def writeImages(mtxHash, output_folder, dates, names):
 
@@ -235,52 +240,6 @@ def extractTransitions(pred, pred_CF, noiseCF):
     return hash_source_sink_mtx
 
 
-def saveFig(i, pred, pred_cf, sample, sampleCF, x_axis, out_path):
-    plt.clf()
-    # x_axis= np.arange(len(sample))
-    plt.plot(x_axis, sample,'b')
-    plt.plot(x_axis, sampleCF,'r')
-    plt.savefig(out_path+"/sample_%d_from_cl_%d_2cl_%d.jpg"%(i, pred, pred_cf) )
-
-
-def computeOrig2pred(orig_label, pred):
-    classes = np.unique(orig_label)
-    n_classes = len( classes )
-    hashOrig2Pred = {}
-    for v in classes:
-        idx = np.where(orig_label == v)[0]
-        hashOrig2Pred[v] = np.bincount( pred[idx], minlength=n_classes )
-    return hashOrig2Pred
-
-
-def predictionAndCF(model, noiser, data, device):
-    labels = []
-    pred_tot = []
-    dataCF = []
-    pred_CF = []
-    noise_CF = []
-    model.eval()
-    noiser.eval()
-    for x in data:
-        x = x[0]
-        x = x.to(device)
-        pred = model(x)
-        to_add = noiser(x)
-        pred_cf = model(x+to_add)
-        dataCF.append( (x+to_add).cpu().detach().numpy() )
-        pred_tot.append( np.argmax( pred.cpu().detach().numpy() ,axis=1) )
-        pred_CF.append( np.argmax( pred_cf.cpu().detach().numpy() ,axis=1) )
-        noise_CF.append( np.squeeze( to_add.cpu().detach().numpy() ) )
-    pred_tot = np.concatenate(pred_tot, axis=0)
-    pred_CF = np.concatenate(pred_CF, axis=0)
-    return pred_tot, pred_CF, np.concatenate(dataCF,axis=0), np.concatenate(noise_CF,axis=0)
-
-def extractNDVI(x_train):
-    eps = np.finfo(np.float32).eps
-    red = x_train[:,2,:]
-    nir = x_train[:,3,:]
-    temp_data = (nir - red ) / ( (nir + red) + eps )
-    return np.expand_dims(temp_data, 1)
 
 def main(argv):
     year = 2020
@@ -295,17 +254,11 @@ def main(argv):
     names_chord = ["CEREALS", "COTTON", "OLEAGINOUS", "GRASSLAND",
             "SHRUBLAND", "FOREST", "B.", "W."]  # "BUILT-UP", "WATER"
 
-    x_train = np.load("x_train_%d.npy"%year)
-    x_train = np.moveaxis(x_train,(0,1,2),(0,2,1))
-    y_train = np.load("y_train_%d.npy"%year)-1.
+    x_train, y_train = loadSplitNpy('train', DATA_DIR, year)
+    x_valid, y_valid = loadSplitNpy('valid', DATA_DIR, year)
+    x_test, y_test = loadSplitNpy('test', DATA_DIR, year)
+
     n_classes = len(np.unique(y_train))
-
-    x_test = np.load("x_test_%d.npy"%year)
-    x_test = np.moveaxis(x_test,(0,1,2),(0,2,1))
-    y_test = np.load("y_test_%d.npy"%year)-1.
-
-    x_train = extractNDVI(x_train)
-    x_test = extractNDVI(x_test)
 
     n_timestamps = x_train.shape[-1]
     
@@ -324,9 +277,11 @@ def main(argv):
     noiser.to(device)
     
     file_path = "model_weights_tempCNN"
+    file_path = os.path.join(MODEL_DIR, file_path)
     model.load_state_dict(torch.load(file_path))
 
     path_file_noiser = "noiser_weights"
+    path_file_noiser = os.path.join(MODEL_DIR, path_file_noiser)
     noiser.load_state_dict(torch.load(path_file_noiser))
 
     # CF on training data
@@ -388,6 +343,7 @@ def main(argv):
             plt.ylabel('NDVI')
             plt.legend(frameon=False)
             plt.savefig(output_name, bbox_inches = "tight")
+            plt.close()
 
 
     # Analyzing generated perturbations
@@ -441,7 +397,7 @@ def main(argv):
     for i in range(len(pred)):
         if pred[i] != pred_CF[i]:
             print("%d out of %d"%(i,len(pred)))
-            saveFig(i, pred[i], pred_CF[i], x_test[i], dataCF[i], dates, out_path)
+            saveFig(i, pred[i], pred_CF[i], x_test[i], dataCF[i], out_path, dates)
             #exit()
     '''
 if __name__ == "__main__":
