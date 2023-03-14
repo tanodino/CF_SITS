@@ -29,7 +29,7 @@ Files concerning this part:
 - `plot_time_line.py` : plots a timeline based on `dates.txt`
 - [DEPRECATED?] `generateCF.py` : loads model and noiser, computes predictions and CFs, then prints the class transitions as matrix.
 
-## Geral use files
+## General use files
 ### Reusable python modules
 Files concerning this part:
 - `model.py` contains declaration of different models used by other scripts
