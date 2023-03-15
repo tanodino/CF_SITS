@@ -50,6 +50,7 @@ def freezeModel(model):
 
 def savePklModel(model, file_path, model_dir=None):
     model_dir = model_dir or DEFAULT_MODEL_DIR
+    file_path = os.path.join(model_dir, file_path)
     if not file_path.endswith('.pkl'):
         file_path += '.pkl'
     with open(file_path, "wb") as f:
