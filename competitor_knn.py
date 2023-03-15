@@ -78,12 +78,14 @@ def trainCfModel(args):
     logging.info("Clf model ready")
 
     # train CF model
-    logging.info("training CF model...")
     cfModel = KNeighborsCounterfactual(random_state=args.seed)
+    logging.info("training CF model...")
     if not args.dry_run:
         cfModel.fit(clfModel)
+    logging.info("Cf model trained")
+
     savePklModel(cfModel, args.noiser_name)
-    logging.info("Cf model ready")
+    logging.info("Cf model saved")
 
 def predictCfSamples(args):
 
