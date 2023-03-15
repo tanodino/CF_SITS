@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import pickle as pkl
 
 import numpy as np
 import pandas as pd
@@ -19,6 +20,7 @@ from sklearn.metrics import normalized_mutual_info_score
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.metrics import accuracy_score
 
+DEFAULT_MODEL_DIR = "models"
 
 def setSeed(seed=0):
     np.random.seed(seed)
@@ -36,7 +38,9 @@ def sendToDevice(torchObjList, device=None):
         obj.to(device)
 
 
-def loadModel(model, file_path):
+def loadModel(model, file_path, model_dir=None):
+    model_dir = model_dir or DEFAULT_MODEL_DIR
+    file_path = os.path.join(model_dir, file_path)
     model.load_state_dict(torch.load(file_path))
 
 
@@ -44,8 +48,20 @@ def freezeModel(model):
     for p in model.parameters():
         p.requires_grad = False
 
+def savePklModel(model, file_path, model_dir=None):
+    model_dir = model_dir or DEFAULT_MODEL_DIR
+    if not file_path.endswith('.pkl'):
+        file_path += '.pkl'
+    with open(file_path, "wb") as f:
+        pkl.dump(model, f)
 
-
+def loadPklModel(file_path, model_dir=None):
+    model_dir = model_dir or DEFAULT_MODEL_DIR
+    file_path = os.path.join(model_dir, file_path)
+    if not file_path.endswith('.pkl'):
+        file_path += '.pkl'
+    with open(file_path, "rb") as f:
+        return pkl.load(f)
 
 def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, device):
     # XXX on main_multi.py, this is called at each epoch begining
@@ -73,6 +89,12 @@ def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, dev
             print("\t\t BEST VALID %f" % score_valid)
 
         sys.stdout.flush()
+
+
+def torchModelPredict(model, data_x):
+    device = getDevice()
+    model.to(device)
+    return ClfPrediction(model, data_x, device)
 
 
 def ClfPrediction(model, data_x, device):

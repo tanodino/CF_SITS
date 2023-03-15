@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 
+DEFAULT_DATA_DIR = "data"
 
 VALID_SPLITS = {'train', 'valid', 'test'}
 
@@ -24,12 +25,13 @@ def _validate_split(split):
             f"split should be one of {VALID_SPLITS} and not {split}")
 
 
-def fname(x_or_y, split, year=2020):
+def _fname(x_or_y, split, year=2020):
     return f"{x_or_y}_{split}_{year}.npy"
 
 
 def loadOneNpy(x_or_y, split, data_path=None, year=2020, ndvi=True):
-    path = Path(data_path, fname(x_or_y, split, year))
+    data_path = data_path or DEFAULT_DATA_DIR
+    path = Path(data_path, _fname(x_or_y, split, year))
     data = np.load(path)
     if x_or_y == 'x':
         data = np.moveaxis(data, (0, 1, 2), (0, 2, 1))
@@ -40,23 +42,26 @@ def loadOneNpy(x_or_y, split, data_path=None, year=2020, ndvi=True):
     return data
 
 
-def loadSplitNpy(split, data_path=None, year=2020):
+def loadSplitNpy(split, data_path=None, year=2020, return_dict=False):
     _validate_split(split)
     X = loadOneNpy('x', split, data_path, year)
     y = loadOneNpy('y', split, data_path, year)
-    return X, y
+    if return_dict:
+        return dict(X=X, y=Y)
+    else:
+        return X, y
 
 
-def loadAllDataNpy(data_path=None, year=2020):
-    data = SimpleNamespace(
-        train=loadSplitNpy('train', data_path, year),
-        valid=loadSplitNpy('valid', data_path, year),
-        test=loadSplitNpy('test', data_path, year)
-    )
-    data = SimpleNamespace(
-        **{split: loadSplitNpy(split, data_path, year)
+def loadAllDataNpy(data_path=None, year=2020, return_dict=False):
+    data = {split: loadSplitNpy(split, data_path, year, return_dict)
            for split in VALID_SPLITS}
-    )
+    # get y_train to compute n_classes
+    if return_dict:
+        y = data['train']['y']
+    else:
+        _, y = data['train']
+    classes = np.unique(y)
+    data.update(n_classes=len(classes), classes=classes)
     return data
 
 
