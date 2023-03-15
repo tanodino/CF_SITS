@@ -147,7 +147,7 @@ if __name__ == "__main__":
     # pred command parsing
     pred_cmd = subparsers.add_parser(
         'pred',
-        description='preds CF samples from previously trained CF odel'
+        description='preds CF samples from previously trained CF model'
     )
     pred_cmd.add_argument(
         "--out-path",
