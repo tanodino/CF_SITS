@@ -13,14 +13,19 @@ import os
 from pathlib import Path
 import numpy as np
 import logging
+import re
+from glob import glob
 
 from wildboar.explain.counterfactual import KNeighborsCounterfactual as OriginalKNeighborsCounterfactual
 
 from cfsits_tools import cli
 from cfsits_tools.cli import getBasicParser
-from cfsits_tools.data import loadAllDataNpy, VALID_SPLITS, npyData2DataLoader
+from cfsits_tools.data import loadAllDataNpy, VALID_SPLITS, npyData2DataLoader, loadSplitNpy
 from cfsits_tools.model import S2Classif
-from cfsits_tools.utils import loadModel, savePklModel, loadPklModel, torchModelPredict
+from cfsits_tools.utils import loadModel, savePklModel, loadPklModel, torchModelPredict, getDevice, ClfPrediction
+
+
+from ExtractCF import produceResults
 
 
 def trainCfModel(args):
@@ -64,12 +69,13 @@ def predictCfSamples(args):
     # into which the CF explainer is going to try to push X
     # I can generate CFs to all possible classes
 
-    split = args.split
-    X, y = fullData[split]
+    X, y = fullData[args.split]
+
     X = np.squeeze(X)
     for src_label in fullData["classes"]:
         logging.info(f"Building Cfs from class {src_label}...")
         X_src = X[y == src_label]
+        X_src_idx = np.arange(X.shape[0])[y == src_label]
         for dst_label in fullData['classes']:
             if dst_label != src_label:
                 logging.info(f"Building Cfs to class {dst_label}...")
@@ -80,12 +86,81 @@ def predictCfSamples(args):
                     X_cfs = np.zeros_like(X_src)
                 logging.info(f"Cfs to class {dst_label} done")
                 # save CFs from src to dst classes
-                output_fname = f"CFs_{split}_from_{int(src_label)}_to_{int(dst_label)}.npy"
-                output_fpath = Path(args.out_path, output_fname)
-                os.makedirs(output_fpath.parent, exist_ok=True)
-                np.save(output_fpath, X_cfs)
+                base_dir = Path(args.cfs_path, args.split)
+                os.makedirs(base_dir, exist_ok=True)
+                output_fname = f"CFs_from_{int(src_label)}_to_{int(dst_label)}.npy"
+                np.save(Path(base_dir, output_fname), X_cfs)
                 logging.info(
-                    f"Cfs from class {int(src_label)} saved to {output_fname}")
+                    f"Cfs from class {int(src_label)}"
+                    "saved to {Path(base_dir, output_fname)}")
+
+                # save indexes in the original X array
+                idx_fname = output_fname.replace("CFs", "IDX")
+                np.save(Path(base_dir, idx_fname), X_src_idx)
+
+
+def loadCFExamples(path):
+    file_list = glob(str(path)+"/CFs*.npy")
+    idx_list = glob(str(path)+"/IDX*.npy")
+    dataCF = []
+    srcClass = []
+    dstClass = []
+    idxCF = []
+    for fpath, idx_path in zip(file_list, idx_list):
+        # load data
+        this_dataCF = np.load(fpath)
+        dataCF.append(this_dataCF)
+        idxCF.append(np.load(idx_path))
+        # extract class info from filename
+        fname = Path(fpath).name
+        src, dst = re.search(r"from_(\d+)_to_(\d+)", fname).groups()
+        srcClass += [int(src)] * this_dataCF.shape[0]
+        dstClass += [int(dst)] * this_dataCF.shape[0]
+    dataCF = np.concatenate(dataCF, axis=0)
+    idxCF = np.concatenate(idxCF, axis=0)
+    srcClass = np.array(srcClass)
+    dstClass = np.array(dstClass)
+    return dataCF, idxCF, srcClass, dstClass
+
+
+def getResults(args):
+    # Load data
+    X, y_true = loadSplitNpy(args.split, year=args.year)
+    dataloader = npyData2DataLoader(X, y_true, batch_size=2048)
+    X = X.squeeze()
+
+    # Load model and make predictions
+    model = S2Classif(n_class=len(np.unique(y_true)), dropout_rate=.5)
+    model.to(getDevice())
+    loadModel(model, args.model_name)
+    y_pred = ClfPrediction(model, dataloader)
+
+    # load counter factuals
+    dataCF, idxCF, srcClass, dstClass = loadCFExamples(
+        Path(args.cfs_path, args.split))
+
+    # reindex X, y_true and y+pred to make them coherent with dataCF
+    X = X[idxCF]
+    y_true = srcClass
+    y_pred = y_pred[idxCF]
+
+    # Calculate noise
+    noiseCF = dataCF - X
+
+    # make predictions on data CF to evaluate classifier perf on them
+    dataCF_dataloader = npyData2DataLoader(
+        dataCF[:, np.newaxis, :], batch_size=2048)
+    y_predCF = ClfPrediction(model, dataCF_dataloader)
+
+    # Prepare output path
+    output_folder = Path(
+        args.out_path,
+        f"{args.model_name}_{getNoiserName(args)}",
+        f"{args.split}")
+    os.makedirs(output_folder, exist_ok=True)
+
+    produceResults(args.split, output_folder, y_true,
+                   y_pred, y_predCF, dataCF, noiseCF)
 
 
 class KNeighborsCounterfactual(OriginalKNeighborsCounterfactual):
@@ -151,9 +226,7 @@ if __name__ == "__main__":
         type=Path
     )
 
-    subparsers = parser.add_subparsers(
-        dest='subcommand',
-        required=True)
+    subparsers = parser.add_subparsers(dest='subcommand')
 
     # train command parsing
     train_cmd = subparsers.add_parser(
@@ -167,11 +240,32 @@ if __name__ == "__main__":
         help='preds CF samples from previously trained CF model'
     )
     pred_cmd.add_argument(
-        "--out-path",
+        "--cfs-path",
         default=Path(LOG_DIR, "cf_data"),
         type=Path
     )
     pred_cmd.add_argument(
+        "--split",
+        choices=VALID_SPLITS,
+        default="test"
+    )
+
+    # results command parsing
+    result_cmd = subparsers.add_parser(
+        'results',
+        help='prints and saves results, plors, '
+    )
+    result_cmd.add_argument(
+        "--cfs-path",
+        default=Path(LOG_DIR, "cf_data"),
+        type=Path
+    )
+    result_cmd.add_argument(
+        "--out-path",
+        default=Path("img"),
+        type=Path
+    )
+    result_cmd.add_argument(
         "--split",
         choices=VALID_SPLITS,
         default="test"
@@ -186,3 +280,5 @@ if __name__ == "__main__":
         trainCfModel(args)
     elif args.subcommand == 'pred':
         predictCfSamples(args)
+    elif args.subcommand == 'results':
+        getResults(args)
