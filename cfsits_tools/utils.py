@@ -20,6 +20,7 @@ from sklearn.metrics import normalized_mutual_info_score
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.metrics import accuracy_score
 
+
 DEFAULT_MODEL_DIR = "models"
 
 def setSeed(seed=0):
@@ -64,9 +65,10 @@ def loadPklModel(file_path, model_dir=None):
     with open(file_path, "rb") as f:
         return pkl.load(f)
 
-def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, device):
+def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, device=None):
     # XXX on main_multi.py, this is called at each epoch begining
     # Which one is correct?
+    device = device or getDevice()
     model.train()
     best_validation = 0
     for e in range(n_epochs):
@@ -98,7 +100,8 @@ def torchModelPredict(model, data_x):
     return ClfPrediction(model, data_x, device)
 
 
-def ClfPrediction(model, data_x, device):
+def ClfPrediction(model, data_x, device=None):
+    device = device or getDevice()
     pred_all = []
     model.eval()
     for x in data_x:
@@ -109,7 +112,8 @@ def ClfPrediction(model, data_x, device):
     return np.concatenate(pred_all, axis=0)
 
 
-def evaluate(model, data_xy, device):
+def evaluate(model, data_xy, device=None):
+    device = device or getDevice()
     labels = []
     pred_tot = []
     model.eval()
@@ -123,7 +127,8 @@ def evaluate(model, data_xy, device):
     return f1_score(labels, pred_tot, average="weighted")
 
 
-def generateCF(noiser, loader, device):
+def generateCF(noiser, loader, device=None):
+    device = device or getDevice()
     dataCF = []
     noiser.eval()
     for x_batch in loader:
@@ -136,8 +141,9 @@ def generateCF(noiser, loader, device):
     return np.concatenate(dataCF, axis=0)
 
 
-def predictionAndCF(model, noiser, data, device):
+def predictionAndCF(model, noiser, data, device=None):
     """from ExtractCF.py, more complete than the one from generateCF.py"""
+    device = device or getDevice()
     labels = []
     pred_tot = []
     dataCF = []
@@ -157,7 +163,9 @@ def predictionAndCF(model, noiser, data, device):
         noise_CF.append(np.squeeze(to_add.cpu().detach().numpy()))
     pred_tot = np.concatenate(pred_tot, axis=0)
     pred_CF = np.concatenate(pred_CF, axis=0)
-    return pred_tot, pred_CF, np.concatenate(dataCF, axis=0), np.concatenate(noise_CF, axis=0)
+    dataCF = np.concatenate(dataCF, axis=0)
+    noiseCF = np.concatenate(noise_CF, axis=0)
+    return pred_tot, pred_CF, dataCF, noiseCF
 
 
 # def predictionAndCF(model, noiser, data, device):
@@ -183,7 +191,8 @@ def predictionAndCF(model, noiser, data, device):
 #     return pred_tot, pred_CF, np.concatenate(dataCF, axis=0)
 
 
-def generateOrigAndAdd(model, noiser, train, device):
+def generateOrigAndAdd(model, noiser, train, device=None):
+    device = device or getDevice()
     data = []
     dataCF = []
     prediction_cf = []
