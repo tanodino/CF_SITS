@@ -47,7 +47,7 @@ def loadSplitNpy(split, data_path=None, year=2020, return_dict=False):
     X = loadOneNpy('x', split, data_path, year)
     y = loadOneNpy('y', split, data_path, year)
     if return_dict:
-        return dict(X=X, y=Y)
+        return dict(X=X, y=y)
     else:
         return X, y
 
