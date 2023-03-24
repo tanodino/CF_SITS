@@ -1,3 +1,4 @@
+from collections import namedtuple
 from types import SimpleNamespace
 from pathlib import Path
 import numpy as np
@@ -10,7 +11,8 @@ DEFAULT_DATA_DIR = "data"
 
 VALID_SPLITS = {'train', 'valid', 'test'}
 
-
+#Define datatuple type
+datatuple = namedtuple("datatuple",["X","y"])
 
 def extractNDVI(x_train):
     eps = np.finfo(np.float32).eps
@@ -29,43 +31,63 @@ def _fname(x_or_y, split, year=2020):
     return f"{x_or_y}_{split}_{year}.npy"
 
 
-def loadOneNpy(x_or_y, split, data_path=None, year=2020, ndvi=True):
+def loadOneNpy(
+        x_or_y, split, data_path=None, year=2020, ndvi=True, squeeze=False, 
+        ch_first=True):
     data_path = data_path or DEFAULT_DATA_DIR
     path = Path(data_path, _fname(x_or_y, split, year))
     data = np.load(path)
     if x_or_y == 'x':
-        data = np.moveaxis(data, (0, 1, 2), (0, 2, 1))
+        if ch_first:
+            data = np.moveaxis(data, (0, 1, 2), (0, 2, 1))
         if ndvi:
             data = extractNDVI(data)
+        if squeeze:
+            data = np.squeeze(data)
     elif x_or_y == 'y':
         data = data - 1.0
     return data
 
 
-def loadSplitNpy(split, data_path=None, year=2020, return_dict=False):
+def loadSplitNpy(split,  **load_kwargs):
     _validate_split(split)
-    X = loadOneNpy('x', split, data_path, year)
-    y = loadOneNpy('y', split, data_path, year)
-    if return_dict:
-        return dict(X=X, y=y)
-    else:
-        return X, y
+    X = loadOneNpy('x', split, **load_kwargs)
+    y = loadOneNpy('y', split, **load_kwargs)
+    return datatuple(X, y)
 
 
-def loadAllDataNpy(data_path=None, year=2020, return_dict=False):
-    data = {split: loadSplitNpy(split, data_path, year, return_dict)
+def dummyTrainTestData(n_samples_per_class=100, n_timestamps=5, n_classes=3, 
+                       test_size=0.2, seed=0):
+    from tslearn.generators import random_walk_blobs
+    from sklearn.model_selection import train_test_split
+    X, y = random_walk_blobs(
+        n_samples_per_class, n_timestamps, 
+        d=1, n_blobs=n_classes, random_state=seed)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X[:, :, 0], y, 
+        test_size=test_size, random_state=seed, 
+        stratify=y)
+    fullData = dict(classes=list(range(n_classes)), n_classes=n_classes)
+    fullData['train'] = datatuple(X_train, y_train)
+    fullData['test'] = datatuple(X_test, y_test)
+    return fullData
+
+
+def loadAllDataNpy(**load_kwargs):
+    data = {split: loadSplitNpy(split, **load_kwargs)
            for split in VALID_SPLITS}
     # get y_train to compute n_classes
-    if return_dict:
-        y = data['train']['y']
-    else:
-        _, y = data['train']
+    _, y = data['train']
+
     classes = np.unique(y)
     data.update(n_classes=len(classes), classes=classes)
     return data
 
 
 def npyData2Dataset(X, y=None):
+    if X.ndim == 2:
+        X = X[:, np.newaxis, :]
     X = torch.Tensor(X)
     if y is not None:
         y = torch.Tensor(y)
@@ -81,8 +103,8 @@ def npyData2DataLoader(X, y=None, **loader_kwargs):
     return dataloader
 
 
-def loadOneDataset(split, data_path=None, year=2020):
-    X, y = loadSplitNpy(split, data_path, year)
+def loadOneDataset(split, **load_kwargs):
+    X, y = loadSplitNpy(split, **load_kwargs)
     return npyData2Dataset(X, y)
 
 
