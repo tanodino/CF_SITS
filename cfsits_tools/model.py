@@ -219,7 +219,7 @@ class S2Branch(nn.Module):
         output = self.gap(output3)
         #output = self.flatten(output3)
         #return output
-        return torch.squeeze(output)
+        return torch.squeeze(output, dim=-1)
 
 
 
