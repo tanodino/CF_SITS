@@ -24,7 +24,7 @@ def getBasicParser():
     parser.add_argument(
         '--log-level',
         type=numericLogLevel,
-        default=numericLogLevel('Warning')
+        default=numericLogLevel('info')
     )
     parser.add_argument(
         '--dry-run',
