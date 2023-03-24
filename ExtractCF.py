@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 from cfsits_tools.cli import getBasicParser
 from cfsits_tools.model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
-from cfsits_tools.utils import getDevice, loadModel, predictionAndCF
+from cfsits_tools.utils import getDevice, loadWeights, predictionAndCF
 from cfsits_tools.viz import extractTransitions, plotSomeCFExamples, printConfMatrix, printSomeMetrics, writeChord, writeImages
 from cfsits_tools.data import loadSplitNpy, npyData2DataLoader, VALID_SPLITS
 
@@ -51,13 +51,13 @@ def main(args):
     # Load model
     model = S2Classif(n_class=len(np.unique(y_true)), dropout_rate=.5)
     model.to(getDevice())
-    loadModel(model, args.model_name)
+    loadWeights(model, args.model_name)
 
     # load noiser
     n_timestamps = X.shape[-1]
     noiser = Noiser(n_timestamps, .3)
     noiser.to(getDevice())
-    loadModel(noiser, args.noiser_name)
+    loadWeights(noiser, args.noiser_name)
 
     # CF data of the chosen split
     y_pred, y_predCF, dataCF, noiseCF = predictionAndCF(

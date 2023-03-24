@@ -22,7 +22,7 @@ from cfsits_tools import cli
 from cfsits_tools.cli import getBasicParser
 from cfsits_tools.data import loadAllDataNpy, VALID_SPLITS, npyData2DataLoader, loadSplitNpy
 from cfsits_tools.model import S2Classif
-from cfsits_tools.utils import loadModel, savePklModel, loadPklModel, torchModelPredict, getDevice, ClfPrediction
+from cfsits_tools.utils import loadWeights, savePklModel, loadPklModel, ClfPrediction, getDevice, ClfPrediction
 
 
 from ExtractCF import produceResults
@@ -34,7 +34,7 @@ def trainCfModel(args):
 
     # load classification model
     model = S2Classif(fullData["n_classes"])
-    loadModel(model, file_path=args.model_name)
+    loadWeights(model, file_path=args.model_name)
 
     # wrap model for wildboar
     clfModel = ModelWrapper(
@@ -79,7 +79,7 @@ def predictCfSamples(args):
         for dst_label in fullData['classes']:
             if dst_label != src_label:
                 logging.info(f"Building Cfs to class {dst_label}...")
-                dest_y = dst_label * np.ones(X_src.shape[0])
+                dest_y = dst_label * np.ones(X_src.shape[0], dtype=np.int32)
                 if not args.dry_run:
                     X_cfs = cfModel.explain(X_src, dest_y)
                 else:
@@ -132,7 +132,7 @@ def getResults(args):
     # Load model and make predictions
     model = S2Classif(n_class=len(np.unique(y_true)), dropout_rate=.5)
     model.to(getDevice())
-    loadModel(model, args.model_name)
+    loadWeights(model, args.model_name)
     y_pred = ClfPrediction(model, dataloader)
 
     # load counter factuals
@@ -196,7 +196,7 @@ class ModelWrapper():
 
         # _y should be the y_pred for the samples in _fit_X
         X_dl = npyData2DataLoader(X, batch_size=64)
-        self._y = torchModelPredict(self._model, X_dl)
+        self._y = ClfPrediction(self._model, X_dl)
         # XXX maybe need to adapt _y for multiclass? Folowing sklearn's implemntation at
         # https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/neighbors/_base.py#L451
 

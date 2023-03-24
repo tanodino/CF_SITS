@@ -39,7 +39,7 @@ def sendToDevice(torchObjList, device=None):
         obj.to(device)
 
 
-def loadModel(model, file_path, model_dir=None):
+def loadWeights(model, file_path, model_dir=None):
     model_dir = model_dir or DEFAULT_MODEL_DIR
     file_path = os.path.join(model_dir, file_path)
     model.load_state_dict(torch.load(file_path))
@@ -49,21 +49,31 @@ def freezeModel(model):
     for p in model.parameters():
         p.requires_grad = False
 
+
+def savePkl(object, file_path):
+    with open(file_path, "wb") as f:
+        pkl.dump(object, f)
+
+
+def loadPkl(file_path):
+    with open(file_path, "rb") as f:
+        return pkl.load(f)
+
+
 def savePklModel(model, file_path, model_dir=None):
     model_dir = model_dir or DEFAULT_MODEL_DIR
     file_path = os.path.join(model_dir, file_path)
     if not file_path.endswith('.pkl'):
         file_path += '.pkl'
-    with open(file_path, "wb") as f:
-        pkl.dump(model, f)
+    savePkl(model, file_path)
+
 
 def loadPklModel(file_path, model_dir=None):
     model_dir = model_dir or DEFAULT_MODEL_DIR
     file_path = os.path.join(model_dir, file_path)
     if not file_path.endswith('.pkl'):
         file_path += '.pkl'
-    with open(file_path, "rb") as f:
-        return pkl.load(f)
+    return loadPkl(file_path)
 
 def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, device=None):
     # XXX on main_multi.py, this is called at each epoch begining
@@ -94,12 +104,6 @@ def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, dev
         sys.stdout.flush()
 
 
-def torchModelPredict(model, data_x):
-    device = getDevice()
-    model.to(device)
-    return ClfPrediction(model, data_x, device)
-
-
 def ClfPrediction(model, data_x, device=None):
     device = device or getDevice()
     pred_all = []
@@ -111,6 +115,18 @@ def ClfPrediction(model, data_x, device=None):
         pred_all.append((pred.argmax(1)).cpu().detach().numpy())
     return np.concatenate(pred_all, axis=0)
 
+def ClfPredProba(model, data_x, device=None):
+    device = device or getDevice()
+    pred_all = []
+    model.eval()
+    for x in data_x:
+        x = x[0]
+        x = x.to(device)
+        logits = model(x).squeeze(1)
+        probas = F.softmax(logits, dim=1)
+        pred_all.append(probas.cpu().detach().numpy())
+    pred_all = np.concatenate(pred_all, axis=0)
+    return pred_all
 
 def evaluate(model, data_xy, device=None):
     device = device or getDevice()
