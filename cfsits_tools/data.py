@@ -33,7 +33,7 @@ def _fname(x_or_y, split, year=2020):
 
 def loadOneNpy(
         x_or_y, split, data_path=None, year=2020, ndvi=True, squeeze=False, 
-        ch_first=True):
+        ch_first=True, y_float=False):
     data_path = data_path or DEFAULT_DATA_DIR
     path = Path(data_path, _fname(x_or_y, split, year))
     data = np.load(path)
@@ -45,7 +45,11 @@ def loadOneNpy(
         if squeeze:
             data = np.squeeze(data)
     elif x_or_y == 'y':
-        data = data - 1.0
+        if y_float:
+            data = data - 1.0
+        else:
+            data = data.astype('int')
+            data -= 1
     return data
 
 
