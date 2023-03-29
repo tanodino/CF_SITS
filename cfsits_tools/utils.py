@@ -29,8 +29,17 @@ def setSeed(seed=0):
 
 
 def getDevice() -> str:
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device(
+        f"cuda:{torch.cuda.current_device()}" 
+        if torch.cuda.is_available() else "cpu")
     return device
+
+def setFreeDevice():
+    if torch.cuda.is_available():
+        count = torch.cuda.device_count()
+        dev_ix = np.argmin(torch.cuda.memory_allocated(i) for i in range(count))
+        torch.cuda.device(dev_ix)
+
 
 
 def sendToDevice(torchObjList, device=None):
