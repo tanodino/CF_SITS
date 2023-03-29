@@ -15,14 +15,17 @@ import numpy as np
 import logging
 import re
 from glob import glob
+from sklearn.ensemble import IsolationForest
+from sklearn.neighbors import NearestNeighbors
 
 from wildboar.explain.counterfactual import KNeighborsCounterfactual as OriginalKNeighborsCounterfactual
 
 from cfsits_tools import cli
 from cfsits_tools.cli import getBasicParser
 from cfsits_tools.data import loadAllDataNpy, VALID_SPLITS, npyData2DataLoader, loadSplitNpy
+from cfsits_tools.metrics import plausibility, proximity, stability, validity
 from cfsits_tools.model import S2Classif
-from cfsits_tools.utils import loadWeights, savePklModel, loadPklModel, ClfPrediction, getDevice, ClfPrediction
+from cfsits_tools.utils import loadWeights, savePklModel, loadPklModel, ClfPrediction, getDevice, ClfPrediction, setFreeDevice
 
 
 from ExtractCF import produceResults
@@ -100,6 +103,18 @@ def predictCfSamples(args):
 
 
 def loadCFExamples(path):
+    """_summary_
+
+    Args:
+        path (str-like): place where to search for npy file
+
+    Returns:
+        tuple[ndarray]: 
+               (2d array) dataCF : all Cfs in a long 2D array
+               (1d array) idxCF: idx of original data corresponding to CF
+               (array) srcClass: src class of data corresponding to CF
+               (array) dstClass: intended dst class when CF was generated
+    """    
     file_list = glob(str(path)+"/CFs*.npy")
     idx_list = glob(str(path)+"/IDX*.npy")
     dataCF = []
@@ -125,42 +140,89 @@ def loadCFExamples(path):
 
 def getResults(args):
     # Load data
-    X, y_true = loadSplitNpy(args.split, year=args.year)
+    fullData = loadAllDataNpy(year=args.year, squeeze=True)
+    X, y_true = fullData[args.split]
+    n_classes = fullData['n_classes']
+    n_samples = X.shape[0]
     dataloader = npyData2DataLoader(X, y_true, batch_size=2048)
-    X = X.squeeze()
 
     # Load model and make predictions
+    setFreeDevice()
     model = S2Classif(n_class=len(np.unique(y_true)), dropout_rate=.5)
     model.to(getDevice())
     loadWeights(model, args.model_name)
     y_pred = ClfPrediction(model, dataloader)
 
-    # load counter factuals
+    # load cf model to get train cfs later
+    cfModel = loadPklModel(getNoiserName(args), args.model_dir)
+
+    # load counter factuals for split
     dataCF, idxCF, srcClass, dstClass = loadCFExamples(
         Path(args.cfs_path, args.split))
 
-    # reindex X, y_true and y+pred to make them coherent with dataCF
+    # keep only correctly classified samples
+    is_correct=y_true[idxCF] == y_pred[idxCF]
+    # reindex dataCF and co.
+    dataCF = dataCF[is_correct]
+    idxCF = idxCF[is_correct]
+    srcClass = srcClass[is_correct]
+    dstClass = dstClass[is_correct]
+    # reindex X, y_true and y_pred to make them coherent with dataCF
     X = X[idxCF]
-    y_true = srcClass
+    y_true = y_true[idxCF]
     y_pred = y_pred[idxCF]
 
-    # Calculate noise
-    noiseCF = dataCF - X
 
-    # make predictions on data CF to evaluate classifier perf on them
-    dataCF_dataloader = npyData2DataLoader(
-        dataCF[:, np.newaxis, :], batch_size=2048)
-    y_predCF = ClfPrediction(model, dataCF_dataloader)
 
-    # Prepare output path
-    output_folder = Path(
-        args.out_path,
-        f"{args.model_name}_{getNoiserName(args)}",
-        f"{args.split}")
-    os.makedirs(output_folder, exist_ok=True)
+    # Prepare estimators used in metrics
+    outlier_estimator = IsolationForest(n_estimators=300).fit(X)
+    # Stability (aka robustness) from Ates 2020 
+    # in the definition, nearest neighbors are takend from the training set
+    nn_estimator = (NearestNeighbors(n_neighbors=args.n_neighbors)
+                    .fit(fullData['train'].X))
 
-    produceResults(args.split, output_folder, y_true,
-                   y_pred, y_predCF, dataCF, noiseCF)
+    def calc_metric(metric_fn, *metric_args, **metric_kwargs):
+        result = np.NaN * np.ones(X.shape[0])
+        for dst in range(n_classes):
+            if metric_fn.__name__ == 'stability':
+                dest_y = dst * np.ones(fullData['train'].X.shape[0])
+                train_cfs = cfModel.explain(fullData['train'].X, dest_y)
+                metric_kwargs['estimator']._fit_X_cfs = train_cfs
+                # metric_kwargs['target_class'] = dst
+            is_dst = dstClass == dst
+            result[is_dst] = metric_fn(
+                X[is_dst], dataCF[is_dst],
+                *metric_args, **metric_kwargs)
+        return result
+    proximity_avg = np.nanmean(calc_metric(proximity))
+    stability_avg = np.nanmean(calc_metric(stability, estimator=nn_estimator))
+    plausibility_avg = np.nanmean(calc_metric(
+        plausibility, estimator=outlier_estimator))
+    validity_avg = np.nanmean(calc_metric(validity, model=model))
+
+    logging.info("Metrics computed")
+    logging.info(f"avg stability: {stability_avg:0.4f}")
+    logging.info(f"avg plausibility: {plausibility_avg:0.4f}")
+    logging.info(f"avg proximity: {proximity_avg:0.4f}")
+    logging.info(f"avg validity: {validity_avg:0.4f}")
+
+
+    # # Calculate noise
+    # noiseCF = dataCF - X
+    # # make predictions on data CF to evaluate classifier perf on them
+    # dataCF_dataloader = npyData2DataLoader(
+    #     dataCF[:, np.newaxis, :], batch_size=2048)
+    # y_predCF = ClfPrediction(model, dataCF_dataloader)
+    
+    # # Prepare output path
+    # output_folder = Path(
+    #     args.out_path,
+    #     f"{args.model_name}_{getNoiserName(args)}",
+    #     f"{args.split}")
+    # os.makedirs(output_folder, exist_ok=True)
+
+    # produceResults(args.split, output_folder, y_true,
+    #                y_pred, y_predCF, dataCF, noiseCF)
 
 
 class KNeighborsCounterfactual(OriginalKNeighborsCounterfactual):
