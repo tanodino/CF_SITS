@@ -51,7 +51,7 @@ def relative_proximity(X, Xcf, y_cf_pred, nnX, nny, order=2):
     # Xnun = nearest neighbor with class != ypred
     Xnun = np.zeros_like(X)
     for dst in classes:
-        nn = NearestNeighbors().fit(nnX[nny != dst])
+        nn = NearestNeighbors().fit(nnX[nny == dst])
         nn_idx = nn.kneighbors(X[y_cf_pred==dst], n_neighbors=1, return_distance=False).squeeze()
         Xnun[y_cf_pred==dst] = nnX[nny != dst][nn_idx]
     den = np.linalg.norm(X-Xnun, axis=1, ord=order)
