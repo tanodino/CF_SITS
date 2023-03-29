@@ -1,19 +1,22 @@
 # KOUMBIA
 import os
 from pathlib import Path
+import logging
+
 import numpy as np
 import pandas as pd
-
-from sklearn.metrics import confusion_matrix
-
 import matplotlib.pyplot as plt
 
+from sklearn.metrics import confusion_matrix
+from sklearn.ensemble import IsolationForest
+from sklearn.neighbors import NearestNeighbors
 
 from cfsits_tools.cli import getBasicParser
+from cfsits_tools.metrics import compactness, metricsReport, plausibility, proximity, stability, validity
 from cfsits_tools.model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
-from cfsits_tools.utils import getDevice, loadWeights, predictionAndCF
+from cfsits_tools.utils import ClfPrediction, getDevice, loadWeights, predictionAndCF, setFreeDevice
 from cfsits_tools.viz import extractTransitions, plotSomeCFExamples, printConfMatrix, printSomeMetrics, writeChord, writeImages
-from cfsits_tools.data import loadSplitNpy, npyData2DataLoader, VALID_SPLITS
+from cfsits_tools.data import loadAllDataNpy, loadSplitNpy, npyData2DataLoader, VALID_SPLITS
 
 
 def produceResults(split, out_path, y_true, y_pred, y_predCF, dataCF, noiseCF):
@@ -44,16 +47,26 @@ def produceResults(split, out_path, y_true, y_pred, y_predCF, dataCF, noiseCF):
 
 
 def main(args):
+    logging.info(f"Data split: {args.split}")
 
-    X, y_true = loadSplitNpy(args.split, args.year)
+    # Load data
+    fullData = loadAllDataNpy(year=args.year, squeeze=True)
+    n_classes = fullData['n_classes']
+    X, y_true = fullData[args.split]
+    # X, y_true = loadSplitNpy(args.split, args.year)
     dataloader = npyData2DataLoader(X, y_true, batch_size=2048)
 
+    # globally set a free gpu as device (if available)
+    setFreeDevice()
+
     # Load model
+    logging.info('Loading classifier')
     model = S2Classif(n_class=len(np.unique(y_true)), dropout_rate=.5)
     model.to(getDevice())
     loadWeights(model, args.model_name)
 
     # load noiser
+    logging.info('Loading noiser')
     n_timestamps = X.shape[-1]
     noiser = Noiser(n_timestamps, .3)
     noiser.to(getDevice())
@@ -61,55 +74,78 @@ def main(args):
 
     # CF data of the chosen split
     y_pred, y_predCF, dataCF, noiseCF = predictionAndCF(
-        model, noiser, dataloader, getDevice())
+        model, noiser, dataloader)
 
-    # write plots and tables
-    # Prepare output path
-    output_folder = Path(
-        args.out_path,
-        f"{args.model_name}_{args.noiser_name}",
-        f"{args.split}")
-    os.makedirs(output_folder, exist_ok=True)
+    if args.do_plots:
+        # write plots and tables
+        # Prepare output path
+        output_folder = Path(
+            args.img_path,
+            f"{args.model_name}_{args.noiser_name}",
+            f"{args.split}")
+        os.makedirs(output_folder, exist_ok=True)
 
-    produceResults(args.split, output_folder, y_true,
-                   y_pred, y_predCF, dataCF, noiseCF)
+        produceResults(args.split, output_folder, y_true,
+                    y_pred, y_predCF, dataCF, noiseCF)
 
-    # TSNE
-    # plotTSNE(y_true, pred, predCF, noise_CF, output_folder,
-    # random_state=args.seed)
+        # TSNE
+        # plotTSNE(y_true, pred, predCF, noise_CF, output_folder,
+        # random_state=args.seed)
 
-    '''
-    exit()
 
-    # Other
-    idx = np.where(pred == y_test)[0]
-    pred = pred[idx]
-    pred_CF = pred_CF[idx]
-    dataCF = dataCF[idx]
-    x_test = x_test[idx]
 
-    hashOrig2Pred = computeOrig2pred(pred, pred_CF)
-    for k in hashOrig2Pred.keys():
-        print("\t ",k," -> ",hashOrig2Pred[k])
-    out_path = "CF"
-    if not os.path.exists(out_path):
-        os.makedirs(out_path)
+    # CF data of train is needed for stability computation
+    _, _, trainCF, _ = predictionAndCF(
+        model, noiser, npyData2DataLoader(fullData['train'].X, batch_size=2048))
 
-    x_test = np.squeeze(x_test)
-    dataCF = np.squeeze(dataCF)
+    # reindex train X so it matches the train cf array
+    y_pred_train = ClfPrediction(
+        model, npyData2DataLoader(fullData['train'].X, batch_size=2048))
+    logging.info(f"Metrics computed on {args.split} data")
+    metricsReport(
+        X=X, Xcf=dataCF.squeeze(), y_cf_pred=y_predCF,
+        nnX=fullData['train'].X, nnXcf=trainCF.squeeze(), nny=y_pred_train,
+        ifX=fullData['train'].X, k=args.n_neighbors, model=model)
 
-    for i in range(len(pred)):
-        if pred[i] != pred_CF[i]:
-            print("%d out of %d"%(i,len(pred)))
-            saveFig(i, pred[i], pred_CF[i], x_test[i], dataCF[i], out_path, dates)
-            #exit()
-    '''
+    # def calc_metric(metric_fn, *metric_args, **metric_kwargs):
+    #     result = metric_fn(X, dataCF.squeeze(), *metric_args, **metric_kwargs)
+    #     return result
+
+    # proximity_avg = np.mean(calc_metric(proximity))
+    # logging.info(f"avg proximity: {proximity_avg:0.4f}")
+
+
+
+    # stability_avg = np.mean(calc_metric(
+    #     stability, k=args.n_neighbors, 
+    #     nnX=fullData['train'].X, 
+    #     nnXcf=trainCF.squeeze()))
+    # logging.info(f"avg stability: {stability_avg:0.4f}")
+
+    # outlier_estimator = IsolationForest(n_estimators=300).fit(X)
+    # plausibility_avg = np.mean(calc_metric(
+    #     plausibility, estimator=outlier_estimator))
+    # logging.info(f"avg plausibility: {plausibility_avg:0.4f}")
+
+    # validity_avg = np.mean(calc_metric(validity, model=model))
+    # logging.info(f"avg validity: {validity_avg:0.4f}")
+
+
+    # for threshold in [1e-2, 1e-3, 1e-4, 1e-8]:
+    #     compactness_avg = np.nanmean(calc_metric(
+    #         compactness, threshold=threshold))
+    #     logging.info(f"avg compactness @ threshold={threshold:0.1e}: {compactness_avg:0.4f}")
+
+
 
 
 if __name__ == "__main__":
+    LOG_DIR = os.path.join('logs', os.path.basename(
+        os.path.splitext(__file__)[0]))
+    os.makedirs(LOG_DIR, exist_ok=True)
     parser = getBasicParser()
     parser.add_argument(
-        '--out-path',
+        '--img-path',
         default='img'
     )
     parser.add_argument(
@@ -117,7 +153,24 @@ if __name__ == "__main__":
         choices=VALID_SPLITS,
         default='test'
     )
+    parser.add_argument(
+        '-k','--n-neighbors',
+        type=int,
+        default=5
+    )
+    parser.add_argument(
+        '--do-plots',
+        action='store_true',
+        default=False
+    )
 
     args = parser.parse_args()
 
+    logging.basicConfig(
+        filename=Path(LOG_DIR, 'log.txt'),
+        filemode='w',
+        format='[%(asctime)s] %(levelname)s: %(message)s',
+        datefmt='%Y/%m/%d %H:%M:%S',
+        level=args.log_level)
+    logging.info("-"*20 + 'NEW RUN' + "-"*20)
     main(args)

@@ -26,7 +26,8 @@ import seaborn as sns
 import pandas as pd
 
 from cfsits_tools.model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
-from cfsits_tools.utils import generateCF, applyIF
+from cfsits_tools.utils import generateCF
+from cfsits_tools.metrics import applyIF
 from cfsits_tools.viz import plotConfusionMatrix, plotContingencyMatrix
 from cfsits_tools.data import loadSplitNpy, extractNDVI
 

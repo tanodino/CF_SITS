@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import logging
 import pickle as pkl
 
 import numpy as np
@@ -19,6 +20,7 @@ from sklearn.metrics import f1_score
 from sklearn.metrics import normalized_mutual_info_score
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.metrics import accuracy_score
+from tqdm import tqdm
 
 
 DEFAULT_MODEL_DIR = "models"
@@ -29,12 +31,14 @@ def setSeed(seed=0):
 
 
 def getDevice() -> str:
+    # get current cuda device if available, or fallback to cpu
     device = torch.device(
         f"cuda:{torch.cuda.current_device()}" 
         if torch.cuda.is_available() else "cpu")
     return device
 
 def setFreeDevice():
+    # globally set a free gpu as device (if available)
     if torch.cuda.is_available():
         count = torch.cuda.device_count()
         dev_ix = np.argmin(torch.cuda.memory_allocated(i) for i in range(count))
@@ -52,6 +56,7 @@ def loadWeights(model, file_path, model_dir=None):
     model_dir = model_dir or DEFAULT_MODEL_DIR
     file_path = os.path.join(model_dir, file_path)
     model.load_state_dict(torch.load(file_path))
+    logging.info(f"Loaded weights from {file_path}")
 
 
 def freezeModel(model):
@@ -249,8 +254,4 @@ def computeOrig2pred(orig_label, pred):
     return hashOrig2Pred
 
 
-def applyIF(clf, x_test):
-    pred = clf.predict(x_test) + 1
-    pred[np.where(pred == 2)] = 1
-    pred = pred.astype("int")
-    return pred
+

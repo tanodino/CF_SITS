@@ -17,13 +17,14 @@ import re
 from glob import glob
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import NearestNeighbors
+from tqdm import tqdm
 
 from wildboar.explain.counterfactual import KNeighborsCounterfactual as OriginalKNeighborsCounterfactual
 
 from cfsits_tools import cli
 from cfsits_tools.cli import getBasicParser
 from cfsits_tools.data import loadAllDataNpy, VALID_SPLITS, npyData2DataLoader, loadSplitNpy
-from cfsits_tools.metrics import plausibility, proximity, stability, validity
+from cfsits_tools.metrics import compactness, metricsReport, plausibility, proximity, stability, validity
 from cfsits_tools.model import S2Classif
 from cfsits_tools.utils import loadWeights, savePklModel, loadPklModel, ClfPrediction, getDevice, ClfPrediction, setFreeDevice
 
@@ -60,28 +61,32 @@ def trainCfModel(args):
 
 def predictCfSamples(args):
     # Load data
-    fullData = loadAllDataNpy(year=args.year)
+    fullData = loadAllDataNpy(year=args.year, squeeze=True)
+    X, _ = fullData[args.split]
 
     # load CF model
     cfModel = loadPklModel(getNoiserName(args), args.model_dir)
 
-    # produce CF samples using the method explain
-    # explain takes X, y as input
-    # it does account for multi-class y
-    # here y should contain the "destination class"
-    # into which the CF explainer is going to try to push X
-    # I can generate CFs to all possible classes
+    # load classification model
+    setFreeDevice()
+    model = S2Classif(fullData["n_classes"])
+    model.to(getDevice())
+    loadWeights(model, file_path=args.model_name)
+    y_pred = ClfPrediction(model, npyData2DataLoader(X, batch_size=2048))
 
-    X, y = fullData[args.split]
-
-    X = np.squeeze(X)
+    # Generate CFs to all possible classes
     for src_label in fullData["classes"]:
         logging.info(f"Building Cfs from class {src_label}...")
-        X_src = X[y == src_label]
-        X_src_idx = np.arange(X.shape[0])[y == src_label]
+        X_src = X[y_pred == src_label]
+        X_src_idx = np.arange(X.shape[0])[y_pred == src_label]
         for dst_label in fullData['classes']:
             if dst_label != src_label:
                 logging.info(f"Building Cfs to class {dst_label}...")
+                # produce CF samples using the method explain
+                # explain takes X, y as input
+                # it does account for multi-class y
+                # here y should contain the "destination class"
+                # into which the CF explainer is going to try to push X
                 dest_y = dst_label * np.ones(X_src.shape[0], dtype=np.int32)
                 if not args.dry_run:
                     X_cfs = cfModel.explain(X_src, dest_y)
@@ -99,11 +104,47 @@ def predictCfSamples(args):
 
                 # save indexes in the original X array
                 idx_fname = output_fname.replace("CFs", "IDX")
-                np.save(Path(base_dir, idx_fname), X_src_idx)
+                if not args.dry_run:
+                    np.save(Path(base_dir, idx_fname), X_src_idx)
+
+
+def predictCfSamplesFromData(X, n_classes, y_pred, cfModel):
+    """Predict CF samples given data and a NN CF model from wildboar
+
+    Args:
+        X (ndarray): input data
+        n_classes (int): _description_
+        y_pred (ndarray): predicitons for each sample in input data
+        cfModel: wildboar NN CF model
+
+    Returns:
+        tuple[ndarray]: 
+               (2d array) arr : all Cfs in a long 2D array
+               (array) idx: idx of original data corresponding to CF
+               (array) dstClass: intended dst class when CF was generated
+    """    
+    n_samples = X.shape[0]
+    sample_shape = X.shape[1:]
+    arr = []
+    idx = []
+    dstClass = []
+    logging.info("predicting CFs...")
+    for dst in range(n_classes):
+        not_dst = np.where(y_pred != dst)[0]
+        y_target = np.full((not_dst.shape[0]), dst)        
+        Xcf =  cfModel.explain(X[not_dst], y_target)
+        arr.append(Xcf)
+        idx.append(not_dst)
+        dstClass += [dst] * Xcf.shape[0]
+    arr = np.concatenate(arr, axis=0)
+    idx = np.concatenate(idx, axis=0)
+    dstClass = np.array(dstClass)
+    logging.info("predicting CFs done")
+    return arr, idx, dstClass
 
 
 def loadCFExamples(path):
-    """_summary_
+    """Load CF samples from previously generated file
 
     Args:
         path (str-like): place where to search for npy file
@@ -153,59 +194,94 @@ def getResults(args):
     loadWeights(model, args.model_name)
     y_pred = ClfPrediction(model, dataloader)
 
-    # load cf model to get train cfs later
+    # load CF model
     cfModel = loadPklModel(getNoiserName(args), args.model_dir)
 
-    # load counter factuals for split
-    dataCF, idxCF, srcClass, dstClass = loadCFExamples(
-        Path(args.cfs_path, args.split))
+    # # load counter factuals for split
+    # dataCF, idxCF, srcClass, dstClass = loadCFExamples(
+    #     Path(args.cfs_path, args.split))
+    dataCF, idxCF, dstClass = \
+        predictCfSamplesFromData(X, n_classes, y_pred, cfModel)
 
     # keep only correctly classified samples
     is_correct=y_true[idxCF] == y_pred[idxCF]
     # reindex dataCF and co.
     dataCF = dataCF[is_correct]
     idxCF = idxCF[is_correct]
-    srcClass = srcClass[is_correct]
+    # srcClass = srcClass[is_correct]
     dstClass = dstClass[is_correct]
     # reindex X, y_true and y_pred to make them coherent with dataCF
     X = X[idxCF]
     y_true = y_true[idxCF]
     y_pred = y_pred[idxCF]
 
+    y_cf_pred = ClfPrediction(
+        model, npyData2DataLoader(dataCF, batch_size=2048))
 
 
-    # Prepare estimators used in metrics
-    outlier_estimator = IsolationForest(n_estimators=300).fit(X)
-    # Stability (aka robustness) from Ates 2020 
-    # in the definition, nearest neighbors are takend from the training set
-    nn_estimator = (NearestNeighbors(n_neighbors=args.n_neighbors)
-                    .fit(fullData['train'].X))
 
-    def calc_metric(metric_fn, *metric_args, **metric_kwargs):
-        result = np.NaN * np.ones(X.shape[0])
-        for dst in range(n_classes):
-            if metric_fn.__name__ == 'stability':
-                dest_y = dst * np.ones(fullData['train'].X.shape[0])
-                train_cfs = cfModel.explain(fullData['train'].X, dest_y)
-                metric_kwargs['estimator']._fit_X_cfs = train_cfs
-                # metric_kwargs['target_class'] = dst
-            is_dst = dstClass == dst
-            result[is_dst] = metric_fn(
-                X[is_dst], dataCF[is_dst],
-                *metric_args, **metric_kwargs)
-        return result
-    proximity_avg = np.nanmean(calc_metric(proximity))
-    stability_avg = np.nanmean(calc_metric(stability, estimator=nn_estimator))
-    plausibility_avg = np.nanmean(calc_metric(
-        plausibility, estimator=outlier_estimator))
-    validity_avg = np.nanmean(calc_metric(validity, model=model))
 
-    logging.info("Metrics computed")
-    logging.info(f"avg stability: {stability_avg:0.4f}")
-    logging.info(f"avg plausibility: {plausibility_avg:0.4f}")
-    logging.info(f"avg proximity: {proximity_avg:0.4f}")
-    logging.info(f"avg validity: {validity_avg:0.4f}")
 
+    #gen train CFs
+    train_cfs = []
+    train_cf_idx = []
+    train_cf_dst = []
+    for dst in range(n_classes):
+        dest_y = dst * np.ones(fullData['train'].X.shape[0])
+        train_cfs.append(cfModel.explain(fullData['train'].X, dest_y))
+        train_cf_dst.append(dest_y)
+        train_cf_idx.append(np.arange(dest_y.shape[0]))
+    train_cfs = np.concatenate(train_cfs, axis=0)
+    train_cf_idx = np.concatenate(train_cf_idx, axis=0)
+    train_cf_dst = np.concatenate(train_cf_dst, axis=0)
+    # reindex train X so it matches the train cf array
+    nnX = fullData['train'].X[train_cf_idx].squeeze()
+    # compute model predicitons for reindexed X train
+    nny = ClfPrediction(
+        model, npyData2DataLoader(nnX, batch_size=2048))
+
+    metricsReport(X=X, Xcf=dataCF, 
+                  y_cf_pred=y_cf_pred,
+                  nnX = nnX, 
+                  nnXcf = train_cfs, 
+                  nny=nny,
+                  k=args.stability_k, 
+                  ifX=fullData['train'].X, 
+                  model=model, 
+                  nnDstClass=train_cf_dst,
+                  dstClass=dstClass)
+    # # Prepare estimators used in metrics
+    # outlier_estimator = IsolationForest(n_estimators=300).fit(X)
+    # def calc_metric(metric_fn, *metric_args, **metric_kwargs):
+    #     result = np.NaN * np.ones(X.shape[0])
+    #     for dst in range(n_classes):
+    #         if metric_fn.__name__ == 'stability':
+    #             dest_y = dst * np.ones(fullData['train'].X.shape[0])
+    #             train_cfs = cfModel.explain(fullData['train'].X, dest_y)
+    #             metric_kwargs['nnX']= fullData['train'].X
+    #             metric_kwargs['nnXcf'] = train_cfs
+    #             # metric_kwargs['target_class'] = dst
+    #         is_dst = dstClass == dst
+    #         result[is_dst] = metric_fn(
+    #             X[is_dst], dataCF[is_dst],
+    #             *metric_args, **metric_kwargs)
+    #     return result
+    # proximity_avg = np.nanmean(calc_metric(proximity))
+    # stability_avg = np.nanmean(calc_metric(stability, k=args.stability_k))
+    # plausibility_avg = np.nanmean(calc_metric(
+    #     plausibility, estimator=outlier_estimator))
+    # validity_avg = np.nanmean(calc_metric(validity, model=model))
+
+    # logging.info("Metrics computed")
+    # logging.info(f"avg stability: {stability_avg:0.4f}")
+    # logging.info(f"avg plausibility: {plausibility_avg:0.4f}")
+    # logging.info(f"avg proximity: {proximity_avg:0.4f}")
+    # logging.info(f"avg validity: {validity_avg:0.4f}")
+
+    # for threshold in [1e-2, 1e-4, 1e-6, 1e-8]:
+    #     compactness_avg = np.nanmean(calc_metric(
+    #         compactness, threshold=threshold))
+    #     logging.info(f"avg compactness @ threshold={threshold:0.1e}: {compactness_avg:0.4f}")
 
     # # Calculate noise
     # noiseCF = dataCF - X
@@ -315,7 +391,7 @@ if __name__ == "__main__":
     # results command parsing
     result_cmd = subparsers.add_parser(
         'results',
-        help='prints and saves results, plors, '
+        help='prints and saves results, plots',
     )
     result_cmd.add_argument(
         "--cfs-path",
@@ -332,12 +408,22 @@ if __name__ == "__main__":
         choices=VALID_SPLITS,
         default="test"
     )
+    result_cmd.add_argument(
+        "--stability-k",
+        help="n neighbors for stability metric",
+        type=int,
+        default=5
+    )
 
     args = parser.parse_args()
 
     logging.basicConfig(
+        filename=Path(LOG_DIR, f'{args.subcommand}_log.txt'),
+        filemode='w',
+        format='[%(asctime)s] %(levelname)s: %(message)s',
+        datefmt='%Y/%m/%d %H:%M:%S',
         level=args.log_level)
-
+    logging.info("-"*30 + 'NEW RUN' + "-"*30)
     if args.subcommand == 'train':
         trainCfModel(args)
     elif args.subcommand == 'pred':
