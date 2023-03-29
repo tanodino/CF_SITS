@@ -173,17 +173,10 @@ def genCAMMixCounterfactualsClassPair(args, fullData=None):
     is_src = y == src_label
     X_src = X[is_src]
 
-    dest_y = dst_label * np.ones(X_src.shape[0], dtype=np.int32)
-    ng_cfs = fullData['train'].X[ng_cfs_idx]
-    if not args.dry_run:
-        logging.info(f"Computing CAM CFs from class {src_label} to {dst_label}...")
-        cfs_idx = mixer.mix(X_src, ng_cfs, dest_y)
-    else:
-        cfs_idx = np.zeros(X_src.shape[0])
+    cam_cfs = _genCAMMixCFForClassPair(
+        src_label, dst_label, ng_cfs_idx, X_src, fullData, mixer)
 
-    logging.info(f"NGCAMCfs from class {src_label} to {dst_label} done")
-
-    to_save = cfs_idx
+    to_save = cam_cfs
 
     # save CFs indices
     base_dir = Path(args.cfs_path, args.split)
@@ -192,7 +185,8 @@ def genCAMMixCounterfactualsClassPair(args, fullData=None):
     if not args.dry_run:
         np.save(Path(base_dir, output_fname), to_save, allow_pickle=True)
     logging.info(f"NGCAMCfs saved to {Path(base_dir, output_fname)}")
-    return cfs_idx
+    return cam_cfs
+
 
 
 def genCAMMixCounterfactuals(args, fullData=None):
@@ -214,21 +208,7 @@ def genCAMMixCounterfactuals(args, fullData=None):
     except FileNotFoundError:
         ng_cfs_dict = loadCFs(args.cfs_path, args.split, use_cam=False)
 
-    for src_label in fullData['classes']:
-        # og_idx = ng_cfs_dict[src_label]['og_idx']
-        is_src = y == src_label
-        # src_idx = np.where(is_src)[0]  # np.where returns a tuple!
-        X_src = X[is_src]
-        possible_targets = set(fullData['classes']) - {src_label}
-        for dst_label in possible_targets:
-            dest_y = dst_label * np.ones(X_src.shape[0], dtype=np.int32)
-            ng_cfs_idx = ng_cfs_dict[src_label][dst_label]
-            ng_cfs = fullData['train'].X[ng_cfs_idx]
-            if not args.dry_run:
-                cam_cfs = mixer.mix(X_src, ng_cfs, dest_y)
-            else:
-                cam_cfs = ng_cfs
-            ng_cfs_dict[src_label][dst_label] = cam_cfs
+    cam_cfs_dict = _genCAMMixCFFromDict(ng_cfs_dict, mixer, fullData, args)
 
     # save CFs indices
     base_dir = Path(args.cfs_path, args.split)
@@ -236,9 +216,9 @@ def genCAMMixCounterfactuals(args, fullData=None):
     output_fname = NGCAMCF_FNAME
     out_path = Path(base_dir, output_fname)
     if not args.dry_run:
-        np.save(out_path, ng_cfs_dict, allow_pickle=True)
+        np.save(out_path, cam_cfs_dict, allow_pickle=True)
     logging.info(f"NGCAMCfs saved to {out_path}")
-    return ng_cfs_dict
+    return cam_cfs_dict
 
 
 def computeResults(args):
@@ -404,6 +384,33 @@ def joinNGCFFiles(root_dir, use_cam=False):
         return src_dst
     else:
         return None
+
+def _genCAMMixCFFromDict(ng_cfs_dict, mixer, fullData, args):
+    X, y = fullData[args.split]
+    for src_label in fullData['classes']:
+        # og_idx = ng_cfs_dict[src_label]['og_idx']
+        is_src = y == src_label
+        # src_idx = np.where(is_src)[0]  # np.where returns a tuple!
+        X_src = X[is_src]
+        possible_targets = set(fullData['classes']) - {src_label}
+        for dst_label in possible_targets:
+            cam_cfs = _genCAMMixCFForClassPair(
+                src_label, dst_label, ng_cfs_dict, X_src, fullData, mixer)
+            ng_cfs_dict[src_label][dst_label] = cam_cfs
+        return ng_cfs_dict
+
+def _genCAMMixCFForClassPair(
+        src_label, dst_label, ng_cfs_dict, X_src, fullData, mixer):
+    dest_y = dst_label * np.ones(X_src.shape[0], dtype=np.int32)
+    ng_cfs_idx = ng_cfs_dict[src_label][dst_label]
+    ng_cfs = fullData['train'].X[ng_cfs_idx]
+    if not args.dry_run:
+        logging.info(f"Computing CAM CFs from class {src_label} to {dst_label}...")
+        cam_cfs = mixer.mix(X_src, ng_cfs, dest_y)
+        logging.info(f"NGCAMCfs from class {src_label} to {dst_label} done")
+    else:
+        cam_cfs = ng_cfs
+    return cam_cfs
 
 
 def repeatCrossClass(split, fullData, mode, input_dict=defaultdict(dict),
@@ -946,11 +953,11 @@ if __name__ == "__main__":
             predictNGCFSamplesClassPair(args)
             if args.use_cam:
                 genCAMMixCounterfactualsClassPair(args)
-        elif args.use_cam:
-            # genCAMMixCounterfactuals(args)
-            genCAMMixCounterfactualsWithDecorator(args)
         else:
-            predictNGCFSamples(args)    
+            predictNGCFSamples(args)
+            if args.use_cam:
+                genCAMMixCounterfactuals(args)
+                # genCAMMixCounterfactualsWithDecorator(args)
     if args.subcommand == 'results':
         computeResults(args)
 
