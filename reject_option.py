@@ -29,6 +29,26 @@ from cfsits_tools.utils import generateCF, ClfPrediction
 MODEL_DIR = 'models'
 DATA_DIR = 'data'
 
+def barplot(data, labels, xtickLabels):
+    # https://matplotlib.org/stable/gallery/lines_bars_and_markers/barchart.html
+    nbars = data.shape[0]
+    x = np.arange(data.shape[1])
+    width = 1.0/(nbars+1)
+    fig = plt.figure(figsize=(15,5))
+    ax = fig.add_axes([0,0,1,1])
+    # _, ax = plt.subplots(layout='constrained')
+    cmap = plt.get_cmap("tab10")
+    for k in range(nbars):
+        rects = ax.bar(x + k*width, data[k], width, color = cmap(k), label=labels[k])
+        ax.bar_label(rects,padding=3, fmt='%.2f') # Add
+
+    # ax.set_title('F1 score per class')
+    ax.set_ylabel('F1 score')
+    ax.set_ylim(0, 1)
+    ax.set_xticks(x + width/2, xtickLabels)
+    ax.legend(loc='upper left')
+    plt.savefig("barplot.jpg", bbox_inches = "tight")
+
 
 def main(argv):
     year = 2020#int(argv[1])
@@ -113,14 +133,38 @@ def main(argv):
     acc_unreliable_test = (pred_correct_test & CF_changed_test).sum()/(CF_changed_test).sum()
 
     print('Train Accuracy on:\n'
-          f'Full data = {acc_full_train:.2f}\n'
-          f'Reliable data = {acc_reliable_train:.2f}\n'
-          f'Unreliable data = {acc_unreliable_train:.2f}\n')
+          f'\tFull data = {acc_full_train:.2f}\n'
+          f'\tReliable data = {acc_reliable_train:.2f}\n'
+          f'\tUnreliable data = {acc_unreliable_train:.2f}\n')
 
     print('Test Accuracy on:\n'
-          f'Full data = {acc_full_test:.2f}\n'
-          f'Reliable data = {acc_reliable_test:.2f}\n'
-          f'Unreliable data = {acc_unreliable_test:.2f}\n')    
+          f'\tFull data = {acc_full_test:.2f}\n'
+          f'\tReliable data = {acc_reliable_test:.2f}\n'
+          f'\tUnreliable data = {acc_unreliable_test:.2f}\n')
+
+    # Per-class measures (F1 score)
+    # precision, recall, f1, _ = precision_recall_fscore_support(y_real,y_pred)
+    f1_train_full = f1_score(pred_train, y_train, average=None)
+    f1_test_full = f1_score(pred_test, y_test, average=None)
+    f1_train_reliable = f1_score(pred_train[~CF_changed_train], y_train[~CF_changed_train], average=None)
+    f1_test_reliable = f1_score(pred_test[~CF_changed_test], y_test[~CF_changed_test], average=None)    
+    print(f"Train F1 scores on:\n",
+          f"\tFull data     = {f1_train_full.mean()*100:.3f}",
+          f"(per class {np.array2string(f1_train_full*100,precision=2, floatmode='fixed')})\n",
+          f"\tReliable fata = {f1_train_reliable.mean()*100:.3f}",
+          f"(per class {np.array2string(f1_train_reliable*100,precision=2, floatmode='fixed')})\n")
+    print(f"Test F1 scores on:\n",
+          f"\tFull data     = {f1_test_full.mean()*100:.3f}",
+          f"(per class {np.array2string(f1_test_full*100,precision=2, floatmode='fixed')})\n",
+          f"\tReliable data = {f1_test_reliable.mean()*100:.3f}",
+          f"(per class {np.array2string(f1_test_reliable*100,precision=2, floatmode='fixed')})\n")
+
+    classes = ["Cereals", "Cotton", "Oleaginous", "Grassland",
+              "Shrubland", "Forest", "Built-up", "Water", "Overall"]
+    bars = ["Full test data", "Reject option"] 
+    data = np.stack((np.append(f1_test_full, [f1_test_full.mean()], axis=0 ),
+                     np.append(f1_test_reliable, [f1_test_reliable.mean()], axis=0)), axis=0)
+    barplot(data, bars, classes)
 
 if __name__ == "__main__":
    main(sys.argv)
