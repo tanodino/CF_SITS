@@ -146,12 +146,14 @@ if __name__ == "__main__":
     parser = getBasicParser()
     parser.add_argument(
         '--img-path',
-        default='img'
+        default='img',
+        help='Directory in which images are saved'
     )
     parser.add_argument(
         '--split',
         choices=VALID_SPLITS,
-        default='test'
+        default='test',
+        help='Data partition used to compute results.'
     )
     parser.add_argument(
         '-k','--n-neighbors',
@@ -161,7 +163,8 @@ if __name__ == "__main__":
     parser.add_argument(
         '--do-plots',
         action='store_true',
-        default=False
+        default=False,
+        help='Runs plotting functions and writes results to IMG_PATH'
     )
 
     args = parser.parse_args()

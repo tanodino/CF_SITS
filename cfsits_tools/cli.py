@@ -1,34 +1,41 @@
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import logging
 
 def getBasicParser():
-    parser = ArgumentParser()
+    parser = ArgumentParser(
+        formatter_class=ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         "-y","--year",
         default=2020,
         type=int,
+        help='Year of the data. Only 2020 available now.'
         )
     parser.add_argument(
         "--model-name",
-        default="model_weights_tempCNN"
+        default="model_weights_tempCNN",
+        help='Name of the file containing classifier model weights'
         )
     parser.add_argument(
         "--noiser-name",
-        default="noiser_weights_paper"
+        default="noiser_weights_paper",
+        help='Name of the file containing noiser model weights'
     )
     parser.add_argument(
         "--seed",
-        default=0
+        default=0,
+        help='Seed for random generators.'
     )
 
     parser.add_argument(
         '--log-level',
         type=numericLogLevel,
-        default=numericLogLevel('info')
+        default=numericLogLevel('info'),
+        help='Set logging level for script (debug, info, warning, error). '
     )
     parser.add_argument(
         '--dry-run',
-        action='store_true'
+        action='store_true',
+        help='Run without executing computationally long actions. Useful for testing.'
     )
 
     return parser
