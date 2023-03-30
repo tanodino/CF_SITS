@@ -234,6 +234,10 @@ def computeResults(args):
     y_true = y_true[idxCF]
     y_pred = y_pred[idxCF]
 
+    # compute model predcs for dataCF
+    y_cf_pred = ClfPrediction(
+        model, npyData2DataLoader(dataCF, batch_size=2048))
+
 
     # do same for x train
     # files were saved following y_true as src class
@@ -243,8 +247,7 @@ def computeResults(args):
     train_cfs_dict = swich_true_to_pred_class(
         train_cfs_dict, fullData['train'].y, train_pred)
     train_cfs, train_cf_idx, train_cf_dst = cf_dict_to_long_array(train_cfs_dict, train_pred)
-    y_cf_pred = ClfPrediction(
-        model, npyData2DataLoader(dataCF, batch_size=2048))
+
     
 
     # reindex train X so it matches the train cf array
