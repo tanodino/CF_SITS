@@ -345,7 +345,8 @@ def plotSomeCFExamples(y_true, y_pred, pred_CF, noiseCF, dataCF,
         CF = dataCF[correct_idx & (y_pred==source_k) & (pred_CF==sink_k)].squeeze()
         x = CF - noiseCF[correct_idx & (y_pred==source_k) & (pred_CF==sink_k)] 
         idx = np.random.randint(CF.shape[0], size=min(46,CF.shape[0]))
-        # idx = np.array([1177, 2207, 1729, 1136]) # selected indices
+        if CF.shape[0] > 2207: # selected indices
+            idx = np.append(idx, [1177, 2207, 1729, 1136]) 
         for k in idx:
             output_name = Path(
                 output_path,
