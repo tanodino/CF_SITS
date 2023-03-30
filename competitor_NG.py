@@ -218,9 +218,11 @@ def computeResults(args):
         train_cfs_dict = get_X_cfs()
     logging.getLogger(__name__).setLevel(logging.INFO)
 
+    # files were saved following y_true as src class
+    # reorganize using y_pred
+    cfs_dict = swich_true_to_pred_class(cfs_dict, y_true, y_pred)
     # convert test cf dict to long array
-    # cfs_dict = swich_true_to_pred_class(cfs_dict, X, y_true, y_pred, model)
-    dataCF, idxCF, dstClass = cf_dict_to_long_array(cfs_dict, y_true)
+    dataCF, idxCF, dstClass = cf_dict_to_long_array(cfs_dict, y_pred)
     # keep only correctly classified samples
     is_correct=y_true[idxCF] == y_pred[idxCF]
     # reindex dataCF and co.
@@ -232,10 +234,15 @@ def computeResults(args):
     y_true = y_true[idxCF]
     y_pred = y_pred[idxCF]
 
-    # Prepare estimators used in metrics
-    outlier_estimator = IsolationForest(n_estimators=300).fit(X)
 
-    train_cfs, train_cf_idx, train_cf_dst = cf_dict_to_long_array(train_cfs_dict, fullData['train'].y)
+    # do same for x train
+    # files were saved following y_true as src class
+    # reorganize using y_pred
+    train_pred = ClfPrediction(
+        model, npyData2DataLoader(fullData['train'].X, batch_size=2048))
+    train_cfs_dict = swich_true_to_pred_class(
+        train_cfs_dict, fullData['train'].y, train_pred)
+    train_cfs, train_cf_idx, train_cf_dst = cf_dict_to_long_array(train_cfs_dict, train_pred)
     y_cf_pred = ClfPrediction(
         model, npyData2DataLoader(dataCF, batch_size=2048))
     
@@ -303,15 +310,12 @@ def switch_src_dst_dict(src_dst_dict):
     return dst_src_dict
 
 
-def swich_true_to_pred_class(src_dst_dict, X, y_true, y_pred, model):
+def swich_true_to_pred_class(src_dst_dict, y_true, y_pred):
     long_array = cf_dict_to_array(src_dst_dict, y_true)
     new_dict = defaultdict(dict)
     for src in src_dst_dict.keys():
         for dst in src_dst_dict[src].keys():
             x_cf = np.atleast_2d(long_array[y_pred == src, dst, ...])
-            # is_nan = np.isnan(x_cf).any(axis=1)
-            # x_cf[is_nan] = np.NaN
-            # is_nan =
             new_dict[src][dst] = x_cf
     return new_dict
 
@@ -887,12 +891,6 @@ if __name__ == "__main__":
         "-k", "--n_neighbors",
         default=5,
         type=int
-    )
-    result_cmd.add_argument(
-        "--zero-threshold",
-        default=1e-3,
-        help="values lower than this are considered zero (used for compactness metric)",
-        type=float
     )
     result_cmd.add_argument(
         "--out-path",
