@@ -250,55 +250,24 @@ def getResults(args):
                   model=model, 
                   nnDstClass=train_cf_dst,
                   dstClass=dstClass)
-    # # Prepare estimators used in metrics
-    # outlier_estimator = IsolationForest(n_estimators=300).fit(X)
-    # def calc_metric(metric_fn, *metric_args, **metric_kwargs):
-    #     result = np.NaN * np.ones(X.shape[0])
-    #     for dst in range(n_classes):
-    #         if metric_fn.__name__ == 'stability':
-    #             dest_y = dst * np.ones(fullData['train'].X.shape[0])
-    #             train_cfs = cfModel.explain(fullData['train'].X, dest_y)
-    #             metric_kwargs['nnX']= fullData['train'].X
-    #             metric_kwargs['nnXcf'] = train_cfs
-    #             # metric_kwargs['target_class'] = dst
-    #         is_dst = dstClass == dst
-    #         result[is_dst] = metric_fn(
-    #             X[is_dst], dataCF[is_dst],
-    #             *metric_args, **metric_kwargs)
-    #     return result
-    # proximity_avg = np.nanmean(calc_metric(proximity))
-    # stability_avg = np.nanmean(calc_metric(stability, k=args.stability_k))
-    # plausibility_avg = np.nanmean(calc_metric(
-    #     plausibility, estimator=outlier_estimator))
-    # validity_avg = np.nanmean(calc_metric(validity, model=model))
 
-    # logging.info("Metrics computed")
-    # logging.info(f"avg stability: {stability_avg:0.4f}")
-    # logging.info(f"avg plausibility: {plausibility_avg:0.4f}")
-    # logging.info(f"avg proximity: {proximity_avg:0.4f}")
-    # logging.info(f"avg validity: {validity_avg:0.4f}")
+    if args.do_plots:
+        # Calculate noise
+        noiseCF = dataCF - X
+        # make predictions on data CF to evaluate classifier perf on them
+        dataCF_dataloader = npyData2DataLoader(
+            dataCF[:, np.newaxis, :], batch_size=2048)
+        y_predCF = ClfPrediction(model, dataCF_dataloader)
+        
+        # Prepare output path
+        output_folder = Path(
+            args.out_path,
+            f"{args.model_name}_{getNoiserName(args)}",
+            f"{args.split}")
+        os.makedirs(output_folder, exist_ok=True)
 
-    # for threshold in [1e-2, 1e-4, 1e-6, 1e-8]:
-    #     compactness_avg = np.nanmean(calc_metric(
-    #         compactness, threshold=threshold))
-    #     logging.info(f"avg compactness @ threshold={threshold:0.1e}: {compactness_avg:0.4f}")
-
-    # # Calculate noise
-    # noiseCF = dataCF - X
-    # # make predictions on data CF to evaluate classifier perf on them
-    # dataCF_dataloader = npyData2DataLoader(
-    #     dataCF[:, np.newaxis, :], batch_size=2048)
-    # y_predCF = ClfPrediction(model, dataCF_dataloader)
-    
-    # # Prepare output path
-    # output_folder = Path(
-    #     args.out_path,
-    #     f"{args.model_name}_{getNoiserName(args)}",
-    #     f"{args.split}")
-    # os.makedirs(output_folder, exist_ok=True)
-
-    # produceResults(args.split, output_folder, y_true,
-    #                y_pred, y_predCF, dataCF, noiseCF)
+        produceResults(args.split, output_folder, y_true,
+                    y_pred, y_predCF, dataCF, noiseCF)
 
 
 class KNeighborsCounterfactual(OriginalKNeighborsCounterfactual):
@@ -407,6 +376,10 @@ if __name__ == "__main__":
         "--split",
         choices=VALID_SPLITS,
         default="test"
+    )
+    result_cmd.add_argument(
+        "--do-plots",
+        action="store_true"
     )
     result_cmd.add_argument(
         "--stability-k",
