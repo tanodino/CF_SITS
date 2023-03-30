@@ -299,9 +299,9 @@ def main(argv):
     torch.manual_seed(0)
     print('\n=========\nManual seed activated for reproducibility\n=========')
 
-    x_train, y_train = loadSplitNpy('train', DATA_DIR, year, ndvi=False)
-    x_valid, y_valid = loadSplitNpy('valid', DATA_DIR, year, ndvi=False)
-    x_test, y_test = loadSplitNpy('test', DATA_DIR, year, ndvi=False)
+    x_train, y_train = loadSplitNpy('train', data_path=DATA_DIR, year=year, ndvi=False)
+    x_valid, y_valid = loadSplitNpy('valid', data_path=DATA_DIR, year=year, ndvi=False)
+    x_test, y_test = loadSplitNpy('test', data_path=DATA_DIR, year=year, ndvi=False)
 
     # Commented so that we have multivariate time series (4 channels)
     # x_train = extractNDVI(x_train)

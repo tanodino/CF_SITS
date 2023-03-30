@@ -29,9 +29,9 @@ DATA_DIR = 'data'
 def main(argv):
     year = 2020#int(argv[1])
 
-    x_train, y_train = loadSplitNpy('train', DATA_DIR, year)
-    x_valid, y_valid = loadSplitNpy('valid', DATA_DIR, year)
-    x_test, y_test = loadSplitNpy('test', DATA_DIR, year)
+    x_train, y_train = loadSplitNpy('train', data_path=DATA_DIR, year=year)
+    x_valid, y_valid = loadSplitNpy('valid', data_path=DATA_DIR, year=year)
+    x_test, y_test = loadSplitNpy('test', data_path=DATA_DIR, year=year)
 
 
 
