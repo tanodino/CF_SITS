@@ -23,6 +23,7 @@ import torch
 
 from tslearn.neighbors import KNeighborsTimeSeries, KNeighborsTimeSeriesClassifier
 from tslearn.utils import to_time_series_dataset
+from ExtractCF import produceResults
 
 from cfsits_tools.cli import getBasicParser
 from cfsits_tools.data import dummyTrainTestData, loadAllDataNpy, VALID_SPLITS, npyData2DataLoader
@@ -257,61 +258,23 @@ def computeResults(args):
         nnDstClass=train_cf_dst,
         dstClass=dstClass)
 
-    # def calc_metric(metric_fn, *metric_args, **metric_kwargs):
-    #     result = np.NaN * np.ones((X.shape[0]))
-    #     for dst in range(n_classes):
-    #         if metric_fn.__name__ == 'stability':
-    #             train_cfs, train_cf_idx, train_cf_dst = cf_dict_to_long_array(train_cfs_dict, fullData['train'].y)
-    #             to_dst = train_cf_dst == dst
-    #             metric_kwargs['nnXcf'] = train_cfs[to_dst]
-    #             metric_kwargs['nnX'] = fullData['train'].X[train_cf_idx][to_dst]
-    #         is_dst = dstClass == dst
-    #         result[is_dst] = metric_fn(
-    #             X[is_dst], dataCF[is_dst],
-    #             *metric_args, **metric_kwargs)
-    #     return result
-    # proximity_avg = np.nanmean(calc_metric(proximity))
-    # stability_avg = np.nanmean(calc_metric(stability, k=args.n_neighbors))
-    # plausibility_avg = np.nanmean(calc_metric(
-    #     plausibility, estimator=outlier_estimator))
-    # validity_avg = np.nanmean(calc_metric(validity, model=model))
-    # logging.info("Metrics computed")
-    # logging.info(f"avg stability: {stability_avg:0.4f}")
-    # logging.info(f"avg plausibility: {plausibility_avg:0.4f}")
-    # logging.info(f"avg proximity: {proximity_avg:0.4f}")
-    # logging.info(f"avg validity: {validity_avg:0.4f}")
+    if args.do_plots:
+        # Calculate noise
+        noiseCF = dataCF - X
+        # make predictions on data CF to evaluate classifier perf on them
+        dataCF_dataloader = npyData2DataLoader(
+            dataCF[:, np.newaxis, :], batch_size=2048)
+        y_predCF = ClfPrediction(model, dataCF_dataloader)
+        
+        # Prepare output path
+        output_folder = Path(
+            args.out_path,
+            f"{args.model_name}_noiser_NG"+"CAM" if args.use_cam else "",
+            f"{args.split}")
+        os.makedirs(output_folder, exist_ok=True)
 
-    # for threshold in [1e-2, 1e-4, 1e-6, 1e-8]:
-    #     compactness_avg = np.nanmean(calc_metric(
-    #         compactness, threshold=threshold))
-    #     logging.info(f"avg compactness @ threshold={threshold:0.1e}: {compactness_avg:0.4f}")
-    # 1e-2, -4, -6, -8
-    # # reorganize test cfs using pred class as src instead of true class
-    # cfs_dict = swich_true_to_pred_class(cfs_dict, y, y_pred)
-
-    # mode = 'transform'
-    # @repeatCrossClass(args.split, fullData, mode, cfs_dict)
-    # def calc_metric(X_src, dest_y, X_cfs, metric_fn=None,
-    #                 **metric_fn_kwargs):
-    #     # out = dict(
-    #     #     proximity=proximity(X_src, X_cfs).mean(),
-    #     #     plausibility=plausibility(X_src, X_cfs,
-    #     #                               estimator=outlier_estimator).mean(),
-    #     #     stability=stability(X_src, X_cfs, estimator=nn_estimator).mean()
-    #     #     count=X_src.shape[0]
-    #     #     )
-    #     return np.mean(metric_fn(X_src, X_cfs, **metric_fn_kwargs))
-    #     # return out
-
-    # def agg_avg(mean, count):
-    #     return (mean *count).sum()/count.sum()
-    # count = class_pair_dict_to_square_array(calc_metric(lambda x, *a,**kw : x.shape[0] ))
-
-    # proximity_avg = agg_avg(class_pair_dict_to_square_array(calc_metric(proximity)), count)
-    # stability_avg = agg_avg(class_pair_dict_to_square_array(
-    #     calc_metric(stability, estimator=nn_estimator)), count)
-    # plausibility_avg = agg_avg(class_pair_dict_to_square_array(
-    #     calc_metric(plausibility, estimator=outlier_estimator)), count)
+        produceResults(args.split, output_folder, y_true,
+                    y_pred, y_predCF, dataCF, noiseCF)
 
 
 def class_pair_dict_to_square_array(src_dst_dict):
@@ -940,6 +903,10 @@ if __name__ == "__main__":
         "--split",
         choices=VALID_SPLITS,
         default="test"
+    )
+    result_cmd.add_argument(
+        "--do-plots",
+        action="store_true"
     )
 
     args = parser.parse_args()
