@@ -332,7 +332,20 @@ def printSomeMetrics(y_true, y_pred, pred_CF, noiseCF):
 
     print(f'\nNoise avg. L2 norm: {np.linalg.norm(noiseCF, ord=2, axis=1).mean()} (+- {np.linalg.norm(noiseCF, ord=2, axis=1).std()})')
     print(f'Noise avg. L1 norm: {np.linalg.norm(noiseCF, ord=1, axis=1).mean()} (+- {np.linalg.norm(noiseCF, ord=1, axis=1).std()})')
+    print(f'Noise avg. L0 norm (>1e-2): {np.mean(noiseCF>1e-2,axis=1).mean()} (+- {np.sum(noiseCF>1e-2,axis=1).std()})')
+    print(f'Noise avg. L0 norm (>1e-3): {np.mean(noiseCF>1e-3,axis=1).mean()} (+- {np.sum(noiseCF>1e-3,axis=1).std()})')
+    print(f'Noise avg. L0 norm (>1e-6): {np.mean(noiseCF>1e-6,axis=1).mean()} (+- {np.sum(noiseCF>1e-6,axis=1).std()})')
+    print(f'Noise avg. L0 norm (>1e-8): {np.mean(noiseCF>1e-8,axis=1).mean()} (+- {np.sum(noiseCF>1e-8,axis=1).std()})')
+    print(f'Noise avg. L0 norm (>0): {np.mean(noiseCF>0,axis=1).mean()} (+- {np.sum(noiseCF>0,axis=1).std()})')
 
+
+    print(f'\nNoise avg. L2 norm: {np.linalg.norm(noiseCF[correct_idx], ord=2, axis=1).mean()} (+- {np.linalg.norm(noiseCF[correct_idx], ord=2, axis=1).std()})')
+    print(f'Noise avg. L1 norm: {np.linalg.norm(noiseCF[correct_idx], ord=1, axis=1).mean()} (+- {np.linalg.norm(noiseCF[correct_idx], ord=1, axis=1).std()})')
+    print(f'Noise avg. L0 norm (>1e-2): {np.mean(noiseCF[correct_idx]>1e-2,axis=1).mean()} (+- {np.sum(noiseCF[correct_idx]>1e-2,axis=1).std()})')
+    print(f'Noise avg. L0 norm (>1e-3): {np.mean(noiseCF[correct_idx]>1e-3,axis=1).mean()} (+- {np.sum(noiseCF[correct_idx]>1e-3,axis=1).std()})')
+    print(f'Noise avg. L0 norm (>1e-6): {np.mean(noiseCF[correct_idx]>1e-6,axis=1).mean()} (+- {np.sum(noiseCF[correct_idx]>1e-6,axis=1).std()})')
+    print(f'Noise avg. L0 norm (>1e-8): {np.mean(noiseCF[correct_idx]>1e-8,axis=1).mean()} (+- {np.sum(noiseCF[correct_idx]>1e-8,axis=1).std()})')
+    print(f'Noise avg. L0 norm (>0): {np.mean(noiseCF[correct_idx]>0,axis=1).mean()} (+- {np.sum(noiseCF[correct_idx]>0,axis=1).std()})')
 
 
 def plotSomeCFExamples(y_true, y_pred, pred_CF, noiseCF, dataCF,

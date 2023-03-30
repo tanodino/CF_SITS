@@ -33,7 +33,7 @@ MODEL_DIR = 'models'
 DATA_DIR = 'data'
 LOG_DIR = os.path.join('logs', os.path.basename(os.path.splitext(__file__)[0]))
 
-def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer, optimizerD, loss_bce, n_timestamps, device, path_file):
+def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, reg_uni, optimizer, optimizerD, loss_bce, n_timestamps, device, path_file):
     model.eval()
     noiser.train()
     discr.train()
@@ -174,7 +174,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
             
             #loss = 4*loss_classif + .1*uni_reg + .01*reg_L2 + .01*reg_tv + loss_g
 
-            loss = 1.*loss_classif + .5*loss_g + .05*uni_reg #+ .05*reg_L2 + .05*reg_tv
+            loss = 1.*loss_classif + reg_gen*loss_g + reg_uni*uni_reg #.5*loss_g + .05*uni_reg #+ .05*reg_L2 + .05*reg_tv
             loss.backward()
             optimizer.step()
 
@@ -248,6 +248,11 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, optimizer,
 def main(argv):
     year = 2020#int(argv[1])
 
+    reg_gen = float(argv[1]) if len(argv) > 1 else 0.5
+    reg_uni = float(argv[2]) if len(argv) > 2 else 0.05
+    path_file_noiser = argv[3] if len(argv) > 3 else "noiser_weights"
+    shrink = bool(argv[4]) if len(argv) > 4 else False
+
 
     os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -297,7 +302,7 @@ def main(argv):
     #model1 = MLPBranch(.5)
     #model = MLPClassif(n_classes, .5)
     model = S2Classif(n_classes, dropout_rate = .5)
-    noiser = Noiser(n_timestamps, .3)
+    noiser = Noiser(n_timestamps, .3,shrink=shrink)
     discr = Discr(.2)
     model.to(device)
     noiser.to(device)
@@ -319,10 +324,10 @@ def main(argv):
     for p in model.parameters():
         p.requires_grad = False
 
-    path_file_noiser = "noiser_weights"
     path_file_noiser = os.path.join(MODEL_DIR, path_file_noiser)
     #trainModel(model, train_dataloader, valid_dataloader, n_epochs, loss_ce, optimizer, file_path, device)
-    trainModelNoise(model, noiser, discr, train_dataloader, n_epochs, n_classes, optimizer, optimizerD, loss_bce, n_timestamps, device, path_file_noiser)
+    trainModelNoise(model, noiser, discr, train_dataloader, n_epochs, n_classes, reg_gen, reg_uni,
+                    optimizer, optimizerD, loss_bce, n_timestamps, device, path_file_noiser)
     
     #print( model.parameters() )
     #exit()
