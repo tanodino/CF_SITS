@@ -382,8 +382,10 @@ def plotSomeFailedCFExamples(y_true, y_pred, pred_CF, noiseCF, dataCF,
     sources = [4, 5]
     sinks = [5, 4]
     for source_k, sink_k in zip(sources, sinks):
-        CF = dataCF[correct_idx & (y_pred==source_k) & (pred_CF!=sink_k)].squeeze()
-        x = CF - noiseCF[correct_idx & (y_pred==source_k) & (pred_CF!=sink_k)] 
+        filter_mask = correct_idx & (y_pred==source_k) & (pred_CF==y_pred)
+        CF = dataCF[filter_mask].squeeze()
+        x = CF - noiseCF[filter_mask]
+        CF_label = pred_CF[filter_mask] 
         idx = np.random.randint(CF.shape[0], size=min(46,CF.shape[0]))
         if CF.shape[0] > 2207: # selected indices
             idx = np.append(idx, [1177, 2207, 1729, 1136]) 
@@ -394,7 +396,7 @@ def plotSomeFailedCFExamples(y_true, y_pred, pred_CF, noiseCF, dataCF,
             plt.clf()
             plt.figure(figsize=(3.6,2.7)) #(4,3)
             plt.plot(DATES, x[k], label=f'Real ({NAMES[source_k]})')
-            plt.plot(DATES, CF[k], label=f'CF ({NAMES[sink_k]})')
+            plt.plot(DATES, CF[k], label=f'Failed CF ({NAMES[CF_label[k]]})')
             plt.xticks(rotation = 45) # Rotates X-Axis Ticks by 45-degrees
             plt.ylabel('NDVI')
             plt.legend(frameon=False)
