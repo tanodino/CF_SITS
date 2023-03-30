@@ -345,7 +345,7 @@ def printSomeMetrics(y_true, y_pred, pred_CF, noiseCF):
     print(f'Noise avg. L0 norm (>1e-3): {np.mean(np.abs(noiseCF[correct_idx])>1e-3,axis=1).mean()} (+- {np.mean(np.abs(noiseCF[correct_idx])>1e-3,axis=1).std()})')
     print(f'Noise avg. L0 norm (>1e-6): {np.mean(np.abs(noiseCF[correct_idx])>1e-6,axis=1).mean()} (+- {np.mean(np.abs(noiseCF[correct_idx])>1e-6,axis=1).std()})')
     print(f'Noise avg. L0 norm (>1e-8): {np.mean(np.abs(noiseCF[correct_idx])>1e-8,axis=1).mean()} (+- {np.mean(np.abs(noiseCF[correct_idx])>1e-8,axis=1).std()})')
-    print(f'Noise avg. L0 norm (>0): {np.mean(noiseCF[correct_idx]>0,axis=1).mean()} (+- {np.mean(noiseCF[correct_idx]>0,axis=1).std()})')
+    print(f'Noise avg. L0 norm (>0): {np.mean(np.abs(noiseCF[correct_idx])>0,axis=1).mean()} (+- {np.mean(np.abs(noiseCF[correct_idx])>0,axis=1).std()})')
 
 
 def plotSomeCFExamples(y_true, y_pred, pred_CF, noiseCF, dataCF,
