@@ -15,7 +15,7 @@ from cfsits_tools.cli import getBasicParser
 from cfsits_tools.metrics import compactness, metricsReport, plausibility, proximity, stability, validity
 from cfsits_tools.model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
 from cfsits_tools.utils import ClfPrediction, getDevice, loadWeights, predictionAndCF, setFreeDevice
-from cfsits_tools.viz import extractTransitions, plotSomeCFExamples, printConfMatrix, printSomeMetrics, writeChord, writeImages
+from cfsits_tools.viz import extractTransitions, plotSomeCFExamples, plotSomeFailedCFExamples, printConfMatrix, printSomeMetrics, writeChord, writeImages
 from cfsits_tools.data import loadAllDataNpy, loadSplitNpy, npyData2DataLoader, VALID_SPLITS
 
 
@@ -34,6 +34,14 @@ def produceResults(split, out_path, y_true, y_pred, y_predCF, dataCF, noiseCF):
     # ensure output path exists
     os.makedirs(output_path, exist_ok=True)
     plotSomeCFExamples(y_true, y_pred, y_predCF, noiseCF, dataCF,
+                       output_path)
+    
+    
+    # Write some CF examples
+    output_path = Path(out_path, 'examplesCF_failed')
+    # ensure output path exists
+    os.makedirs(output_path, exist_ok=True)
+    plotSomeFailedCFExamples(y_true, y_pred, y_predCF, noiseCF, dataCF,
                        output_path)
 
     # Plot chord diagram

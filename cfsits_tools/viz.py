@@ -374,6 +374,33 @@ def plotSomeCFExamples(y_true, y_pred, pred_CF, noiseCF, dataCF,
             plt.savefig(output_name, bbox_inches = "tight")
             plt.close()
 
+def plotSomeFailedCFExamples(y_true, y_pred, pred_CF, noiseCF, dataCF,
+                         output_path):
+    # Filter for correct predicted samples
+    correct_idx = (y_pred==y_true)
+    # filter for
+    sources = [4, 5]
+    sinks = [5, 4]
+    for source_k, sink_k in zip(sources, sinks):
+        CF = dataCF[correct_idx & (y_pred==source_k) & (pred_CF!=sink_k)].squeeze()
+        x = CF - noiseCF[correct_idx & (y_pred==source_k) & (pred_CF!=sink_k)] 
+        idx = np.random.randint(CF.shape[0], size=min(46,CF.shape[0]))
+        if CF.shape[0] > 2207: # selected indices
+            idx = np.append(idx, [1177, 2207, 1729, 1136]) 
+        for k in idx:
+            output_name = Path(
+                output_path,
+                f'cl{source_k}_to_cl{sink_k}_{k}.png')
+            plt.clf()
+            plt.figure(figsize=(3.6,2.7)) #(4,3)
+            plt.plot(DATES, x[k], label=f'Real ({NAMES[source_k]})')
+            plt.plot(DATES, CF[k], label=f'CF ({NAMES[sink_k]})')
+            plt.xticks(rotation = 45) # Rotates X-Axis Ticks by 45-degrees
+            plt.ylabel('NDVI')
+            plt.legend(frameon=False)
+            plt.savefig(output_name, bbox_inches = "tight")
+            plt.close()
+
 
 def plotTSNE(y_true, pred, pred_CF, noiseCF, output_folder, **tsne_kwargs):
     # TSNE
