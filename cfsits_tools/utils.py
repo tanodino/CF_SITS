@@ -37,12 +37,18 @@ def getDevice() -> str:
         if torch.cuda.is_available() else "cpu")
     return device
 
+
 def setFreeDevice():
     # globally set a free gpu as device (if available)
+    # take random if all show 0 ocupation
     if torch.cuda.is_available():
         count = torch.cuda.device_count()
-        dev_ix = np.argmin(torch.cuda.memory_allocated(i) for i in range(count))
-        torch.cuda.device(dev_ix)
+        mem_aloc = np.array([torch.cuda.memory_allocated(i) for i in range(count)])
+        if np.all(mem_aloc == 0):
+            dev_ix = np.random.randint(count)
+        else:
+            dev_ix = np.argmin(mem_aloc)
+        torch.cuda.set_device(dev_ix)
 
 
 
