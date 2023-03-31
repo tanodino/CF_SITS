@@ -213,7 +213,7 @@ def metricsReport(X, Xcf, y_cf_pred,
         plausibility, estimator=outlier_estimator))
     logging.info(f"avg plausibility: {plausibility_avg:0.4f}")
 
-    validity_avg = np.mean(calc_metric(validity, model=model))
+    validity_avg = np.mean(validity(X, Xcf, model=model))
     logging.info(f"avg validity: {validity_avg:0.4f}")
 
 
