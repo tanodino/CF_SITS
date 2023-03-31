@@ -3,6 +3,7 @@ import sys
 import time
 import logging
 import pickle as pkl
+import random
 
 import numpy as np
 import pandas as pd
@@ -45,7 +46,7 @@ def setFreeDevice():
         count = torch.cuda.device_count()
         mem_aloc = np.array([torch.cuda.memory_allocated(i) for i in range(count)])
         if np.all(mem_aloc == 0):
-            dev_ix = np.random.randint(count)
+            dev_ix = random.randrange(0,count)
         else:
             dev_ix = np.argmin(mem_aloc)
         torch.cuda.set_device(dev_ix)
