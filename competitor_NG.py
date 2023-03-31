@@ -4,6 +4,10 @@ Native-guide (NG)
       - Code: https://github.com/e-delaney/Instance-Based_CFE_TSC
       - Description: replace parts from nearest neighbor; use CAM activations to choose the parts.
 
+Implementation notes:
+- Y pred used for selecting pool of NUN samples in train
+- Y pred also used when generating CFs
+
 """
 from collections import defaultdict
 from functools import wraps
@@ -35,16 +39,27 @@ NGCAMCF_FNAME = f"NGCAMCFs.npy"
 NGCF_FNAME = f"NGCFs_IDX.npy"
 
 
+def trainCFmodel(args, fullData=None):
+    fullData = fullData or loadAllDataNpy(year=args.year, squeeze=True)
+    y_pred = loadPreds(args.model_name, args.split, args.year)
+    cfModel = NGCounterfactual(metric='dtw')
+    if not args.dry_run:
+        train_pred = loadPreds(args.model_name, 'train', args.year)
+        cfModel.fit(fullData["train"].X, train_pred)
+    return cfModel
+
+
 def predictNGCFSamples(args, fullData=None):
     # Load data
     fullData = fullData or loadAllDataNpy(year=args.year, squeeze=True)
     X, y = fullData[args.split]
     n_classes = fullData['n_classes']
 
+    # Load preds
+    y_pred = loadPreds(args.model_name, args.split, args.year)
+
     # create CF model
-    cfModel = NGCounterfactual(metric='dtw')
-    if not args.dry_run:
-        cfModel.fit(*fullData["train"])
+    cfModel = trainCFmodel(args, fullData)
 
     # Prepare save of CFs indices
     base_dir = Path(args.cfs_path, args.split)
@@ -62,7 +77,7 @@ def predictNGCFSamples(args, fullData=None):
         pass
 
     # Find and save NG samples as CFs for samples in X
-    X_cfs_dict = _predNGCFToDict(X, y, n_classes, cfModel, args)
+    X_cfs_dict = _predNGCFToDict(X, y_pred, n_classes, cfModel, args)
 
     if not args.dry_run:
         np.save(out_path, X_cfs_dict, allow_pickle=True)
@@ -92,13 +107,14 @@ def predictNGCFSamplesClassPair(args, fullData=None):
     X, y = fullData[args.split]
     n_classes = fullData['n_classes']
 
+    # Load preds
+    y_pred = loadPreds(args.model_name, args.split, args.year)
+
     # create CF model
-    cfModel = NGCounterfactual(metric='dtw')
-    if not args.dry_run:
-        cfModel.fit(*fullData["train"])
+    cfModel = trainCFmodel(args, fullData)
 
     # Find and save NG samples as CFs for samples in X
-    is_src = y == src_label
+    is_src = y_pred == src_label
     src_idx = np.where(is_src)[0]  # np.where returns a tuple!
     X_src = X[is_src]
     cfs_idx = _predNGCFForClassPair(src_label, dst_label, X_src, cfModel, args)
@@ -121,10 +137,9 @@ def genCAMMixCounterfactualsClassPair(args, fullData=None):
 
     # Load model
     setFreeDevice()
-    model = S2Classif(n_class=len(np.unique(y)), dropout_rate=.5)
+    model = S2Classif(n_class=n_classes, dropout_rate=.5)
     model.to(getDevice())
     loadWeights(model, args.model_name)
-
     # create cam mixer
     mixer = CAMMixer(model)
 
@@ -140,7 +155,9 @@ def genCAMMixCounterfactualsClassPair(args, fullData=None):
     ng_cfs_idx = np.load(in_path, allow_pickle=True)[np.newaxis][0]
     logging.info(f"Loaded {in_path}")
 
-    is_src = y == src_label
+    #load preds
+    y_pred = loadPreds(args.model_name, args.split, args.year)
+    is_src = y_pred == src_label
     X_src = X[is_src]
 
     cam_cfs = _genCAMMixCFForClassPair(
@@ -164,11 +181,13 @@ def genCAMMixCounterfactuals(args, fullData=None):
     X, y = fullData[args.split]
     n_classes = fullData['n_classes']
     # Load model
-    model = S2Classif(n_class=len(np.unique(y)), dropout_rate=.5)
+    model = S2Classif(n_class=n_classes, dropout_rate=.5)
     model.to(getDevice())
     loadWeights(model, args.model_name)
     # create cam mixer
     mixer = CAMMixer(model)
+    #  Load preds
+    y_pred = loadPreds(args.model_name, args.split, args.year)
     # Load NG CFs
     base_dir = Path(args.cfs_path, args.split)
     try:
@@ -177,7 +196,8 @@ def genCAMMixCounterfactuals(args, fullData=None):
     except FileNotFoundError:
         ng_cfs_dict = loadCFs(args.cfs_path, args.split, use_cam=False)
 
-    cam_cfs_dict = _genCAMMixCFFromDict(ng_cfs_dict, mixer, fullData, args)
+    cam_cfs_dict = _genCAMMixCFFromDict(
+        ng_cfs_dict, mixer, X, y_pred, fullData['train'].X, args)
 
     # save CFs indices
     base_dir = Path(args.cfs_path, args.split)
@@ -190,6 +210,43 @@ def genCAMMixCounterfactuals(args, fullData=None):
     return cam_cfs_dict
 
 
+def savePreds(model_name, split, year):
+    base_dir = Path("data")
+    out_name = f'y_pred_{split}_{year}_{model_name}.npy'
+    out_path = Path(base_dir, out_name)
+    print(out_path)
+
+    fullData = loadAllDataNpy(year=year, squeeze=False)
+    # Load model
+    setFreeDevice()
+    model = S2Classif(n_class=fullData['n_classes'], dropout_rate=.5)
+    model.to(getDevice())
+    loadWeights(model, model_name)
+    y_pred = ClfPrediction(
+        model, npyData2DataLoader(fullData[args.split].X, batch_size=2048))
+    np.save(out_path, y_pred)
+
+
+def loadPreds(model_name, split, year):
+    base_dir = Path("data")
+    out_name = f'y_pred_{split}_{year}_{model_name}.npy'
+    out_path = Path(base_dir, out_name)
+    if not out_path.exists():
+        # compute predictions if they do not exist
+        #load data
+        fullData = loadAllDataNpy(split=split, year=year)
+        data = npyData2DataLoader(fullData[split].X, batch_size=1048)
+        # load model
+        setFreeDevice()
+        model = S2Classif(n_class=fullData['n_classes'], dropout_rate=.5)
+        model.to(getDevice())
+        loadWeights(model, args.model_name)
+        y_pred = ClfPrediction(model, data)
+        return y_pred
+    else:
+        return np.load(out_path)
+
+
 def computeResults(args):
     # Load data
     fullData = loadAllDataNpy(year=args.year, squeeze=True)
@@ -200,27 +257,38 @@ def computeResults(args):
     model = S2Classif(n_class=n_classes, dropout_rate=.5)
     model.to(getDevice())
     loadWeights(model, args.model_name)
-    y_pred = ClfPrediction(model, npyData2DataLoader(X, batch_size=2048))
+    y_pred = loadPreds(args.model_name, args.split, args.year)
 
     # load cfs
     cfs_dict = loadCFs(args.cfs_path, args.split, args.use_cam)
     train_cfs_dict = loadCFs(args.cfs_path, 'train', args.use_cam)
 
     # get Xcf if dict contains only indexes
-    logging.getLogger(__name__).setLevel(logging.WARNING)
-    if not args.use_cam:
-        mode = 'load+transform'
-        @repeatCrossClass(args.split, fullData, mode, cfs_dict)
-        def get_X_cfs(X_src, dest_y, X_cfs): return X_cfs
-        cfs_dict = get_X_cfs()
-        @repeatCrossClass(args.split, fullData, mode, train_cfs_dict)
-        def get_X_cfs(X_src, dest_y, X_cfs): return X_cfs
-        train_cfs_dict = get_X_cfs()
-    logging.getLogger(__name__).setLevel(logging.INFO)
+    if args.use_cam == False:
+        cfs_dict = idx_dict_to_cf_dict(cfs_dict, fullData['train'].X)
+        train_cfs_dict = idx_dict_to_cf_dict(train_cfs_dict, fullData['train'].X)
+    
+    # # Not needed anymore ------------------
+    # logging.getLogger(__name__).setLevel(logging.WARNING)
+    # if not args.use_cam:
+    #     mode = 'load+transform'
+    #     @repeatCrossClass(args.split, fullData, mode, cfs_dict)
+    #     def get_X_cfs(X_src, dest_y, X_cfs): return X_cfs
+    #     cfs_dict = get_X_cfs()
+    #     @repeatCrossClass(args.split, fullData, mode, train_cfs_dict)
+    #     def get_X_cfs(X_src, dest_y, X_cfs): return X_cfs
+    #     train_cfs_dict = get_X_cfs()
+    # logging.getLogger(__name__).setLevel(logging.INFO)
+    # # -------------------------------------
 
+
+    # XXX fixed, not needed anymore
     # files were saved following y_true as src class
     # reorganize using y_pred
-    cfs_dict = swich_true_to_pred_class(cfs_dict, y_true, y_pred)
+    # cfs_dict = swich_true_to_pred_class(cfs_dict, y_true, y_pred)
+    # XXX 
+
+
     # convert test cf dict to long array
     dataCF, idxCF, dstClass = cf_dict_to_long_array(cfs_dict, y_pred)
     # keep only correctly classified samples
@@ -240,12 +308,16 @@ def computeResults(args):
 
 
     # do same for x train
-    # files were saved following y_true as src class
-    # reorganize using y_pred
-    train_pred = ClfPrediction(
-        model, npyData2DataLoader(fullData['train'].X, batch_size=2048))
-    train_cfs_dict = swich_true_to_pred_class(
-        train_cfs_dict, fullData['train'].y, train_pred)
+    train_pred = loadPreds(args.model_name, 'train', args.year)
+
+    # XXX fixed, not needed anymore
+    # # files were saved following y_true as src class
+    # # reorganize using y_pred
+    # train_cfs_dict = swich_true_to_pred_class(
+    #     train_cfs_dict, fullData['train'].y, train_pred)
+    # XXX fixed, not needed anymore
+
+
     train_cfs, train_cf_idx, train_cf_dst = cf_dict_to_long_array(train_cfs_dict, train_pred)
 
     
@@ -323,34 +395,42 @@ def swich_true_to_pred_class(src_dst_dict, y_true, y_pred):
     return new_dict
 
 
-def cf_dict_to_array(cfs_dict, y_true):
-    n_classes = len(np.unique(y_true))
-    n_samples = y_true.shape[0]
+def idx_dict_to_cf_dict(ng_idx_dict, X_train):
+    new_dict = defaultdict(dict)
+    for src, src_content in ng_idx_dict.items():
+        for dst, idx in src_content.items():
+            new_dict[src][dst] = X_train[idx]
+    return new_dict
+
+
+def cf_dict_to_array(cfs_dict, y_src):
+    n_classes = len(np.unique(y_src))
+    n_samples = y_src.shape[0]
     sample_shape = cfs_dict[0][1].shape[1:]
     arr = np.full((n_samples, n_classes, *sample_shape), np.NaN)
     for src, src_content in cfs_dict.items():
         src = int(src)
-        og_idx = np.where(y_true == src)[0]
+        og_idx = np.where(y_src == src)[0]
         for dst in src_content.keys():
             arr[og_idx, dst, ...] = src_content[dst]
     return arr
 
 
-def cf_dict_to_long_array(cfs_dict, y_ref):
+def cf_dict_to_long_array(cfs_dict, y_src):
     """ Produces a 2D array containing all CFs.
         returns it along with :
         idx: original indices in data
         dstClass: targeted class for each CF sample
     """
-    n_classes = len(np.unique(y_ref))
-    n_samples = y_ref.shape[0]
+    n_classes = len(np.unique(y_src))
+    n_samples = y_src.shape[0]
     sample_shape = cfs_dict[0][1].shape[1:]
     arr = []
     idx = []
     dstClass = []
     for src, src_content in cfs_dict.items():
         src = int(src)
-        og_idx = np.where(y_ref == src)[0]
+        og_idx = np.where(y_src == src)[0]
         for dst in src_content.keys():
             Xcf = src_content[dst]
             arr.append(Xcf)
@@ -425,27 +505,27 @@ def _predNGCFForClassPair(src_label, dst_label, X_src, cfModel, args):
     return cfs_idx
 
 
-def _genCAMMixCFFromDict(ng_cfs_dict, mixer, fullData, args):
-    X, y = fullData[args.split]
-    for src_label in fullData['classes']:
+def _genCAMMixCFFromDict(ng_cfs_dict, mixer, X, y_pred, X_train, args):
+    classes = np.unique(y_pred)
+    for src_label in classes:
         # og_idx = ng_cfs_dict[src_label]['og_idx']
-        is_src = y == src_label
+        is_src = y_pred == src_label
         # src_idx = np.where(is_src)[0]  # np.where returns a tuple!
         X_src = X[is_src]
-        possible_targets = set(fullData['classes']) - {src_label}
+        possible_targets = set(classes) - {src_label}
         for dst_label in possible_targets:
             ng_cfs_idx = ng_cfs_dict[src_label][dst_label]
             cam_cfs = _genCAMMixCFForClassPair(
-                src_label, dst_label, ng_cfs_idx, X_src, fullData, mixer, args)
+                src_label, dst_label, ng_cfs_idx, X_src, X_train, mixer, args)
             ng_cfs_dict[src_label][dst_label] = cam_cfs
         return ng_cfs_dict
 
 
 def _genCAMMixCFForClassPair(
-        src_label, dst_label, ng_cfs_idx, X_src, fullData, mixer, args):
+        src_label, dst_label, ng_cfs_idx, X_src, X_train, mixer, args):
     dest_y = dst_label * np.ones(X_src.shape[0], dtype=np.int32)
 
-    ng_cfs = fullData['train'].X[ng_cfs_idx]
+    ng_cfs = X_train[ng_cfs_idx]
     if not args.dry_run:
         logging.info(
             f"Computing CAM CFs from class {src_label} to {dst_label}...")
@@ -844,6 +924,7 @@ def test_CrossClassDecorator(args):
 if __name__ == "__main__":
     LOG_DIR = os.path.join('logs', os.path.basename(
         os.path.splitext(__file__)[0]))
+    os.makedirs(LOG_DIR, exist_ok=True)
 
     parser = getBasicParser()
     parser.set_defaults(noiser_name='noiser_NGCAM')
