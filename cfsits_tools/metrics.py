@@ -172,8 +172,35 @@ def applyIF(clf, x_test):
 
 def metricsReport(X, Xcf, y_cf_pred, 
                   nnX, nnXcf, nny, 
-                  k, ifX, model, 
-                  nnDstClass=None, dstClass=None):
+                  k, ifX, model=None, 
+                  nnDstClass=None, dstClass=None,
+                  y_pred=None):
+
+    for order in [1, 2, np.inf]:
+        proximity_avg = np.mean(proximity(X, Xcf, order=order))
+        logging.info(f"avg proximity @ norm-{order}: {proximity_avg:0.4f}")
+
+    for order in [1, 2, np.inf]:
+        rel_prox_avg = np.mean(
+            relative_proximity(X, Xcf, y_cf_pred, nnX, nny, order=order))
+        logging.info(f"avg rel proximity @ norm-{order}: {rel_prox_avg:0.4f}")
+
+    outlier_estimator = IsolationForest(n_estimators=300).fit(ifX)
+    plausibility_avg = np.mean(plausibility(
+        X, Xcf, estimator=outlier_estimator))
+    logging.info(f"avg plausibility: {plausibility_avg:0.4f}")
+
+    if model is None and y_pred is not None:
+        validity_avg = np.mean(validity_from_pred(y_pred, y_cf_pred))
+        logging.info(f"avg validity: {validity_avg:0.4f}")
+    elif model is not None:
+        validity_avg = np.mean(validity(X, Xcf, model))
+        logging.info(f"avg validity: {validity_avg:0.4f}")
+
+    for threshold in [1e-2, 1e-3, 1e-4, 1e-8]:
+        compactness_avg = np.mean(compactness(
+            X, Xcf, threshold=threshold))
+        logging.info(f"avg compactness @ threshold={threshold:0.1e}: {compactness_avg:0.4f}")
 
     if dstClass is not None:
         def calc_metric(metric_fn, *metric_args, **metric_kwargs):
@@ -190,34 +217,7 @@ def metricsReport(X, Xcf, y_cf_pred,
                     X[to_dst], Xcf[to_dst],
                     *metric_args, **metric_kwargs)
             return result
-    else:
-        def calc_metric(metric_fn, *metric_args, **metric_kwargs):
-            result = metric_fn(X, Xcf, *metric_args, **metric_kwargs)
-            return result
 
-    for order in [1, 2, np.inf]:
-        proximity_avg = np.mean(calc_metric(proximity, order=order))
-        logging.info(f"avg proximity @ norm-{order}: {proximity_avg:0.4f}")
-
-    for order in [1, 2, np.inf]:
-        rel_prox_avg = np.mean(
-            relative_proximity(X, Xcf, y_cf_pred, nnX, nny, order=order))
-        logging.info(f"avg rel proximity @ norm-{order}: {rel_prox_avg:0.4f}")
-
-    stability_avg = np.mean(calc_metric(
-        stability, k=k, nnX=nnX, nnXcf=nnXcf))
-    logging.info(f"avg stability: {stability_avg:0.4f}")
-
-    outlier_estimator = IsolationForest(n_estimators=300).fit(ifX)
-    plausibility_avg = np.mean(calc_metric(
-        plausibility, estimator=outlier_estimator))
-    logging.info(f"avg plausibility: {plausibility_avg:0.4f}")
-
-    validity_avg = np.mean(validity(X, Xcf, model=model))
-    logging.info(f"avg validity: {validity_avg:0.4f}")
-
-
-    for threshold in [1e-2, 1e-3, 1e-4, 1e-8]:
-        compactness_avg = np.nanmean(calc_metric(
-            compactness, threshold=threshold))
-        logging.info(f"avg compactness @ threshold={threshold:0.1e}: {compactness_avg:0.4f}")
+        stability_avg = np.mean(calc_metric(
+            stability, k=k, nnX=nnX, nnXcf=nnXcf))
+        logging.info(f"avg stability: {stability_avg:0.4f}")
