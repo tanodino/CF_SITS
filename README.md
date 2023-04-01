@@ -13,7 +13,7 @@ Files concerning this part:
 
 ## Noiser training
 Files concerning this part:
-- `main_regDiego.py`: trains a noiser ("noiser_weights") from a base model ("model_weights_tempCNN")
+- `main_noiser.py`: trains a noiser ("noiser_weights") from a base model ("model_weights_tempCNN")
 -  [FUTURE] `main_multi.py`: trains a noiser for a multivariate case (for now the scripts seems to train a classifier as well?). This is halted now and kept for the future.
 
 
