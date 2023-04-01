@@ -358,6 +358,7 @@ def plotSomeCFExamples(y_true, y_pred, pred_CF, noiseCF, dataCF,
         for sink_k in sinks:
             if source_k != sink_k:
                 CF = dataCF[correct_idx & (y_pred==source_k) & (pred_CF==sink_k)].squeeze()
+                CF = np.atleast_2d(CF) # avoids error when a single CF exists (it would be squeezed)
                 x = CF - noiseCF[correct_idx & (y_pred==source_k) & (pred_CF==sink_k)] 
                 idx = np.random.randint(CF.shape[0], size=min(5,CF.shape[0]))
                 if CF.shape[0] > 2207: # selected indices
