@@ -76,7 +76,7 @@ def main(args):
     # load noiser
     logging.info('Loading noiser')
     n_timestamps = X.shape[-1]
-    noiser = Noiser(n_timestamps, .3)
+    noiser = Noiser(n_timestamps, .3, shrink=args.shrink)
     noiser.to(getDevice())
     loadWeights(noiser, args.noiser_name)
 
@@ -173,7 +173,13 @@ if __name__ == "__main__":
         action='store_true',
         default=False,
         help='Runs plotting functions and writes results to IMG_PATH'
-    )
+    )    
+    parser.add_argument(
+        '--shrink',
+        action='store_true',
+        default=False,
+        help='To be used when the Noiser was trained with shrink=True'
+    )    
 
     args = parser.parse_args()
 
