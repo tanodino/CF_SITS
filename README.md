@@ -17,9 +17,8 @@ All plots get saved in the folder `img`. A metrics summary is logged both to the
 The project can be divided into the following functional blocks:
 1. **[Model training]** Training a classifier model
 2. **[Noiser training]** Training the counterfactual generative model based on an existing classifier
-3. **[Noiser application]** Use the noiser model to produce counterfactual examples
-4. **[Result analysis]** Scripts and notebooks registering metrics, plots and tables for the paper
-5. **[General utils]** General utility files, be them scripts or data
+3. **[Result analysis]** Scripts and notebooks registering metrics, plots and tables for the paper
+4. **[General utils]** General utility files, be them scripts or data
 
 ## Model training
 Files concerning this part:
