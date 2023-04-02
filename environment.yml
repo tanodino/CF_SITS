@@ -15,4 +15,6 @@ dependencies:
   - pip:
     - mpl-chord-diagram
     - chord
+    - tslearn
+    - wildboar
 

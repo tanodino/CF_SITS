@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import logging
+import sys
 
 import numpy as np
 import pandas as pd
@@ -15,43 +16,9 @@ from cfsits_tools.cli import getBasicParser
 from cfsits_tools.metrics import compactness, metricsReport, plausibility, proximity, stability, validity
 from cfsits_tools.model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
 from cfsits_tools.utils import ClfPrediction, getCurrentDevice, loadWeights, predictionAndCF, setFreeDevice
-from cfsits_tools.viz import extractTransitions, plotSomeCFExamples, plotSomeFailedCFExamples, printConfMatrix, printSomeMetrics, writeChord, writeImages
+from cfsits_tools.viz import printConfMatrix, printSomeMetrics
 from cfsits_tools.data import loadAllDataNpy, loadSplitNpy, npyData2DataLoader, VALID_SPLITS
-
-
-def produceResults(split, out_path, y_true, y_pred, y_predCF, dataCF, noiseCF):
-    # print some metrics
-    print(f"{split.upper()} DATA INFO")
-    printSomeMetrics(y_true, y_pred, y_predCF, noiseCF)
-
-    # print confusion matrix for somples correctly predicted
-    correct_idx = y_true == y_pred
-    cm = confusion_matrix(y_pred[correct_idx], y_predCF[correct_idx])
-    printConfMatrix(cm)
-
-    # Write some CF examples
-    output_path = Path(out_path, 'examplesCF')
-    # ensure output path exists
-    os.makedirs(output_path, exist_ok=True)
-    plotSomeCFExamples(y_true, y_pred, y_predCF, noiseCF, dataCF,
-                       output_path)
-    
-    
-    # Write some CF examples
-    output_path = Path(out_path, 'examplesCF_failed')
-    # ensure output path exists
-    os.makedirs(output_path, exist_ok=True)
-    plotSomeFailedCFExamples(y_true, y_pred, y_predCF, noiseCF, dataCF,
-                       output_path)
-
-    # Plot chord diagram
-    # Analyzing generated perturbations
-    mtxHash = extractTransitions(y_pred, y_predCF, noiseCF)
-    writeImages(mtxHash, out_path)
-
-    writeChord(cm,
-               Path(out_path,
-                    f"chord_graph_CF_{split}.pdf"))
+from cfsits_tools.viz import produceResults
 
 
 def main(args):
@@ -84,6 +51,11 @@ def main(args):
     y_pred, y_predCF, dataCF, noiseCF = predictionAndCF(
         model, noiser, dataloader)
 
+    # print confusion matrix for somples correctly predicted
+    correct_idx = y_true == y_pred
+    cm = confusion_matrix(y_pred[correct_idx], y_predCF[correct_idx])
+    printConfMatrix(cm)
+
     if args.do_plots:
         # write plots and tables
         # Prepare output path
@@ -106,45 +78,17 @@ def main(args):
     _, _, trainCF, _ = predictionAndCF(
         model, noiser, npyData2DataLoader(fullData['train'].X, batch_size=2048))
 
-    # reindex train X so it matches the train cf array
+    # Compute predictions for train data
     y_pred_train = ClfPrediction(
         model, npyData2DataLoader(fullData['train'].X, batch_size=2048))
     logging.info(f"Metrics computed on {args.split} data")
     metricsReport(
-        X=X, Xcf=dataCF.squeeze(), y_cf_pred=y_predCF,
-        nnX=fullData['train'].X, nnXcf=trainCF.squeeze(), nny=y_pred_train,
+        X=X, Xcf=dataCF.squeeze(),
+        y_pred_cf=y_predCF,
+        X_train=fullData['train'].X, 
+        y_pred_train=y_pred_train,
+        Xcf_train=trainCF.squeeze(), 
         ifX=fullData['train'].X, k=args.n_neighbors, model=model)
-
-    # def calc_metric(metric_fn, *metric_args, **metric_kwargs):
-    #     result = metric_fn(X, dataCF.squeeze(), *metric_args, **metric_kwargs)
-    #     return result
-
-    # proximity_avg = np.mean(calc_metric(proximity))
-    # logging.info(f"avg proximity: {proximity_avg:0.4f}")
-
-
-
-    # stability_avg = np.mean(calc_metric(
-    #     stability, k=args.n_neighbors, 
-    #     nnX=fullData['train'].X, 
-    #     nnXcf=trainCF.squeeze()))
-    # logging.info(f"avg stability: {stability_avg:0.4f}")
-
-    # outlier_estimator = IsolationForest(n_estimators=300).fit(X)
-    # plausibility_avg = np.mean(calc_metric(
-    #     plausibility, estimator=outlier_estimator))
-    # logging.info(f"avg plausibility: {plausibility_avg:0.4f}")
-
-    # validity_avg = np.mean(calc_metric(validity, model=model))
-    # logging.info(f"avg validity: {validity_avg:0.4f}")
-
-
-    # for threshold in [1e-2, 1e-3, 1e-4, 1e-8]:
-    #     compactness_avg = np.nanmean(calc_metric(
-    #         compactness, threshold=threshold))
-    #     logging.info(f"avg compactness @ threshold={threshold:0.1e}: {compactness_avg:0.4f}")
-
-
 
 
 if __name__ == "__main__":
@@ -184,10 +128,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     logging.basicConfig(
-        filename=Path(LOG_DIR, 'log.txt'),
-        filemode='w',
-        format='[%(asctime)s] %(levelname)s: %(message)s',
+        level=args.log_level,
+        format="%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s",
         datefmt='%Y/%m/%d %H:%M:%S',
-        level=args.log_level)
-    logging.info("-"*20 + 'NEW RUN' + "-"*20)
+        handlers=[
+            logging.FileHandler(
+                Path(LOG_DIR, 'log.txt'), mode="w"
+            ),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
     main(args)
+

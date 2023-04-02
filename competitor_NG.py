@@ -36,7 +36,7 @@ import torch
 
 from tslearn.neighbors import KNeighborsTimeSeries, KNeighborsTimeSeriesClassifier
 from tslearn.utils import to_time_series_dataset
-from ExtractCF import produceResults
+from cfsits_tools.viz import produceResults
 
 from cfsits_tools.cli import getBasicParser
 from cfsits_tools.data import loadAllDataNpy, VALID_SPLITS, npyData2DataLoader
@@ -208,8 +208,9 @@ def computeResults(args):
     # Load data
     fullData = loadAllDataNpy(year=args.year, squeeze=True)
     X, y_true = fullData[args.split]
-    y_pred = loadPreds(args.model_name, args.split, args.year)
     n_classes = fullData['n_classes']
+    y_pred = loadPreds(args.model_name, args.split, args.year)
+    y_pred_train = loadPreds(args.model_name, 'train', args.year)
 
     # Load model
     model = S2Classif(n_class=n_classes, dropout_rate=.5)
@@ -240,34 +241,35 @@ def computeResults(args):
     dataCF = dataCF[is_correct]
     y_predCF = y_predCF[is_correct]
 
-    # Load train CFs and preds
-    NG_idx_train = loadCFs(args.cfs_path, 'train', use_cam=False)
-    if args.use_cam:
-        dataCF_train = loadCFs(args.cfs_path, 'train', use_cam=True)
-    else:
-        dataCF_train = fullData['train'].X[NG_idx_train]
-    y_pred_train = loadPreds(args.model_name, 'train', args.year)
-    y_predCF_train = ClfPrediction(
-        model, npyData2DataLoader(dataCF_train, batch_size=2048))
 
-    # # reindex train X so it matches the train cf array
-    # nnX = fullData['train'].X[train_cf_idx]
-    # # compute model predicitons for reindexed X train
-    # nny = ClfPrediction(
-    #     model, npyData2DataLoader(nnX, batch_size=2048))
-
-    logging.info(
-        f"train samples that went to the class of the NG: "
-        f"{np.sum(fullData['train'].y[NG_idx_train] == y_predCF_train)}"
-        f" out of {y_predCF_train.shape[0]}")
+    try:
+        # Load train CFs and do preds
+        NG_idx_train = loadCFs(args.cfs_path, 'train', use_cam=False)
+        if args.use_cam:
+            dataCF_train = loadCFs(args.cfs_path, 'train', use_cam=True)
+        else:
+            dataCF_train = fullData['train'].X[NG_idx_train]
+        y_predCF_train = ClfPrediction(
+            model, npyData2DataLoader(dataCF_train, batch_size=2048))
+        logging.info(
+            "Number of train samples that went to the class of the NG: "
+            f"{np.sum(fullData['train'].y[NG_idx_train] == y_predCF_train)}"
+            f" out of {y_predCF_train.shape[0]}")
+    except FileNotFoundError:
+        dataCF_train = None
+        logging.warning(
+            "Counterfactual examples for training data not found. "
+            "Stability metrics cannot be computed. To generate this data, "
+            "call this script with the following arguments: "
+            "--split=train pred --use-cam")
 
     metricsReport(
         X=X,
         Xcf=dataCF,
-        y_cf_pred=y_predCF,
-        nnX=fullData['train'].X,
-        nny=y_pred_train,
-        nnXcf=dataCF_train,
+        y_pred_cf=y_predCF,
+        X_train=fullData['train'].X,
+        y_pred_train=y_pred_train,
+        Xcf_train=dataCF_train,
         k=args.n_neighbors,
         ifX=fullData['train'].X,
         model=model,
@@ -411,24 +413,14 @@ class CAMMixer():
     def _findSubarray(self, array, k):
         # used to find the maximum contigious subarray of length k in the explanation weight vector
 
-        n = len(array)
-        vec = []
         # Iterate to find all the sub-arrays
-        for i in range(n-k+1):
-            temp = []
-
-            # Store the sub-array elements in the array
-            for j in range(i, i+k):
-                temp.append(array[j])
-
-            # Push the vector in the container
-            vec.append(temp)
-
-        sum_arr = []
-        for v in vec:
-            sum_arr.append(np.sum(v))
-
-        return (vec[np.argmax(sum_arr)])
+        n = len(array)
+        sub_arr = [array[i:i+k] for i in range(n-k+1)]
+        sub_arr = np.stack(sub_arr, axis=0)
+        # find array with largest value sum
+        value_sum = sub_arr.sum(axis=1)
+        most_influencial_array = sub_arr[np.argmax(value_sum)]
+        return most_influencial_array
 
 
 def native_guide_retrieval(
@@ -562,7 +554,7 @@ if __name__ == "__main__":
     # pred command parsing
     pred_cmd = subparsers.add_parser(
         'pred',
-        help='preds NG CF samples'
+        help='preds NG CF examples'
     )
     pred_cmd.add_argument(
         "--slice",
@@ -573,6 +565,12 @@ if __name__ == "__main__":
         "--split",
         choices=VALID_SPLITS,
         default="test"
+    )
+
+    pred_cmd.add_argument(
+        "--use-cam",
+        action='store_true',
+        default=False
     )
 
     # results command parsing
@@ -599,6 +597,11 @@ if __name__ == "__main__":
         "--do-plots",
         action="store_true"
     )
+    result_cmd.add_argument(
+        "--use-cam",
+        action='store_true',
+        default=False
+    )
 
     args = parser.parse_args()
 
@@ -618,14 +621,7 @@ if __name__ == "__main__":
         predictNGSamples(args)
         if args.use_cam:
             genCAMMixCounterfactuals(args)
-
-    if args.subcommand == 'results':
+    elif args.subcommand == 'results':
         computeResults(args)
 
-    # elif args.subcommand == 'results':
-    #     getResults(args)
-    else:
-        logging.getLogger(__name__).setLevel(logging.DEBUG)
-        # test_NGCounterfactual(args)
-        # test_CrossClassDecorator(args)
 

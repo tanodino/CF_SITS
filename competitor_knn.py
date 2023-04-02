@@ -28,7 +28,7 @@ from cfsits_tools.model import S2Classif
 from cfsits_tools.utils import loadWeights, savePklModel, loadPklModel, ClfPrediction, getCurrentDevice, ClfPrediction, setFreeDevice
 
 
-from ExtractCF import produceResults
+from cfsits_tools.viz import produceResults
 
 
 def trainCfModel(args):
@@ -240,15 +240,15 @@ def getResults(args):
         model, npyData2DataLoader(nnX, batch_size=2048))
 
     metricsReport(X=X, Xcf=dataCF, 
-                  y_cf_pred=y_cf_pred,
-                  nnX = nnX, 
-                  nnXcf = train_cfs, 
-                  nny=nny,
+                  y_pred_cf=y_cf_pred,
+                  X_train = nnX, 
+                  Xcf_train = train_cfs, 
+                  y_pred_train=nny,
                   k=args.stability_k, 
                   ifX=fullData['train'].X, 
                   model=model, 
-                  nnDstClass=train_cf_dst,
-                  dstClass=dstClass)
+                  Xcf_train_target_class=train_cf_dst,
+                  Xcf_target_class=dstClass)
 
     if args.do_plots:
         # Calculate noise

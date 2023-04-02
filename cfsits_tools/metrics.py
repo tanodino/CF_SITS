@@ -58,7 +58,7 @@ def relative_proximity(X, Xcf, y_cf_pred, nnX, nny, order=2):
 
 
 def compactness(X, Xcf, threshold=1e-4):
-    return (np.abs(X-Xcf) >= threshold).mean(axis=1)
+    return (np.abs(X-Xcf) <= threshold).mean(axis=1)
 
 
 def plausibility(X, Xcf, X_ref=None, estimator=None):
@@ -67,7 +67,7 @@ def plausibility(X, Xcf, X_ref=None, estimator=None):
         estimator = IsolationForest(n_estimators=300).fit(X_ref)
     ratios = plausibility_ratios(Xcf, estimator)
     # printOtherIFmetrics(X, Xcf, outlier_estimator)
-    return ratios.outlier
+    return ratios.inlier
 
 
 def plausibility_ratios(X, outlier_estimator):
@@ -169,57 +169,58 @@ def applyIF(clf, x_test):
     return pred
 
 
-def metricsReport(X, Xcf, y_cf_pred, 
-                  nnX, nnXcf, nny, 
-                  k, ifX, model=None, 
-                  nnDstClass=None, dstClass=None,
-                  y_pred=None):
-
+def metricsReport(X, Xcf, y_pred=None, y_pred_cf=None, ifX=None,
+                  X_train=None, y_pred_train=None, Xcf_train=None, k=5, 
+                  Xcf_train_target_class=None, Xcf_target_class=None, model=None):
+    # Proximity
     for order in [1, 2, np.inf]:
         proximity_avg = np.mean(proximity(X, Xcf, order=order))
         logging.info(f"avg proximity @ norm-{order}: {proximity_avg:0.4f}")
 
+    # Relative proximity
     for order in [1, 2, np.inf]:
         rel_prox_avg = np.mean(
-            relative_proximity(X, Xcf, y_cf_pred, nnX, nny, order=order))
+            relative_proximity(X, Xcf, y_pred_cf, X_train, y_pred_train, order=order))
         logging.info(f"avg rel proximity @ norm-{order}: {rel_prox_avg:0.4f}")
 
+    # Plausibility
     outlier_estimator = IsolationForest(n_estimators=300).fit(ifX)
     plausibility_avg = np.mean(plausibility(
         X, Xcf, estimator=outlier_estimator))
     logging.info(f"avg plausibility: {plausibility_avg:0.4f}")
 
+    # Validity
     if model is None and y_pred is not None:
-        validity_avg = np.mean(validity_from_pred(y_pred, y_cf_pred))
+        validity_avg = np.mean(validity_from_pred(y_pred, y_pred_cf))
         logging.info(f"avg validity: {validity_avg:0.4f}")
     elif model is not None:
         validity_avg = np.mean(validity(X, Xcf, model))
         logging.info(f"avg validity: {validity_avg:0.4f}")
 
-    for threshold in [1e-2, 1e-3, 1e-4, 1e-8]:
+    # Compactness
+    for threshold in [1e-2]: #  1e-3, 1e-4, 1e-8
         compactness_avg = np.mean(compactness(
             X, Xcf, threshold=threshold))
         logging.info(f"avg compactness @ threshold={threshold:0.1e}: {compactness_avg:0.4f}")
 
-    if dstClass is not None:
-        def calc_metric(metric_fn, *metric_args, **metric_kwargs):
-            result = np.NaN * np.ones((X.shape[0]))
-            n_classes = len(np.unique(dstClass))
-            for dst in range(n_classes):
-                if (metric_fn.__name__ == 'stability'):
-                    to_dst = nnDstClass == dst
-                    metric_kwargs['nnX'] = nnX[to_dst]
-                    metric_kwargs['nnXcf'] = nnXcf[to_dst]
 
-                to_dst = dstClass == dst
-                result[to_dst] = metric_fn(
-                    X[to_dst], Xcf[to_dst],
-                    *metric_args, **metric_kwargs)
-            return result
+    # Stability
+    if (X_train is None or Xcf_train is None):
+        logging.warning('Counterfactual examples for trainint data are required to compute stability metric, but were missing. Skipping computation')
 
-        stability_avg = np.mean(calc_metric(
-            stability, k=k, nnX=nnX, nnXcf=nnXcf))
+    elif Xcf_target_class is not None:
+        result = np.NaN * np.ones((X.shape[0]))
+        n_classes = len(np.unique(Xcf_target_class))
+        for dst in range(n_classes):
+            result[Xcf_target_class == dst] = stability(
+                X[Xcf_target_class == dst], 
+                Xcf[Xcf_target_class == dst],
+                k=k, 
+                nnX=X_train[Xcf_train_target_class == dst], 
+                nnXcf=Xcf_train[Xcf_train_target_class == dst])
+        stability_avg = np.mean(result)
+
     else:
         stability_avg = np.mean(
-            stability(X=X, Xcf=Xcf, k=k, nnX=nnX, nnXcf=nnXcf))
+            stability(X=X, Xcf=Xcf, k=k, nnX=X_train, nnXcf=Xcf_train))
     logging.info(f"avg stability: {stability_avg:0.4f}")

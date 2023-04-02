@@ -360,7 +360,7 @@ def plotSomeCFExamples(y_true, y_pred, pred_CF, noiseCF, dataCF,
                 CF = dataCF[correct_idx & (y_pred==source_k) & (pred_CF==sink_k)].squeeze()
                 CF = np.atleast_2d(CF) # avoids error when a single CF exists (it would be squeezed)
                 x = CF - noiseCF[correct_idx & (y_pred==source_k) & (pred_CF==sink_k)] 
-                idx = np.random.randint(CF.shape[0], size=min(5,CF.shape[0]))
+                idx = np.random.randint(CF.shape[0], size=min(3,CF.shape[0]))
                 if CF.shape[0] > 2207: # selected indices
                     idx = np.append(idx, [1177, 2207, 1729, 1136]) 
                 for k in idx:
@@ -425,3 +425,36 @@ def plotTSNE(y_true, pred, pred_CF, noiseCF, output_folder, **tsne_kwargs):
                 plt.scatter(X_2d[idx,0], X_2d[idx,1], color=colors[source_k], alpha=(1-sink_k/len(colors)), label=label)
     plt.legend()
     plt.savefig(Path(output_folder,"TSNE.png"), bbox_inches = "tight")
+
+
+def produceResults(split, out_path, y_true, y_pred, y_predCF, dataCF, noiseCF):
+    # print some metrics
+    # print(f"{split.upper()} DATA INFO")
+    # printSomeMetrics(y_true, y_pred, y_predCF, noiseCF)
+
+
+    # Write some CF examples
+    output_path = Path(out_path, 'examplesCF')
+    # ensure output path exists
+    os.makedirs(output_path, exist_ok=True)
+    plotSomeCFExamples(y_true, y_pred, y_predCF, noiseCF, dataCF,
+                       output_path)
+
+
+    # Write some CF examples
+    output_path = Path(out_path, 'examplesCF_failed')
+    # ensure output path exists
+    os.makedirs(output_path, exist_ok=True)
+    plotSomeFailedCFExamples(y_true, y_pred, y_predCF, noiseCF, dataCF,
+                       output_path)
+
+    # Analyzing generated perturbations
+    mtxHash = extractTransitions(y_pred, y_predCF, noiseCF)
+    writeImages(mtxHash, out_path)
+
+    # Plot chord diagram
+    correct_idx = y_true == y_pred
+    cm = confusion_matrix(y_pred[correct_idx], y_predCF[correct_idx])
+    writeChord(cm,
+               Path(out_path,
+                    f"chord_graph_CF_{split}.pdf"))

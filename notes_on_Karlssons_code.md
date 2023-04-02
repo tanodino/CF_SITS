@@ -1,5 +1,5 @@
 # Two repos
- - the og messy repo `tstransform`
+ - the original repo `tstransform`
  - the new package repo `wildboard`
 
 ## On the old tstransform code
@@ -57,5 +57,5 @@ Implements the kNN and random forest CF explainers, restricting them to be appli
     - classes_
     - predict
 
-## Experiment strategy
-- I can re-implement wild boar class locally via inheritance and overwrite the `_validate_estimator` method. --> cleaner and easier to ensure reproducibility
+
+**Implementation strategy**:  I can reimplement wildboar class locally via inheritance and override the `_validate_estimator` method. --> cleaner and easier to ensure reproducibility
