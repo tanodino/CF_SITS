@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import sys
 import time
 import logging
@@ -23,18 +24,23 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.metrics import accuracy_score
 from tqdm import tqdm
 
+from cfsits_tools.data import loadAllDataNpy, npyData2DataLoader
+from cfsits_tools.model import S2Classif
+from competitor_NG import args
+
 
 DEFAULT_MODEL_DIR = "models"
+
 
 def setSeed(seed=0):
     np.random.seed(seed)
     torch.manual_seed(seed)
 
 
-def getDevice() -> str:
+def getCurrentDevice() -> str:
     # get current cuda device if available, or fallback to cpu
     device = torch.device(
-        f"cuda:{torch.cuda.current_device()}" 
+        f"cuda:{torch.cuda.current_device()}"
         if torch.cuda.is_available() else "cpu")
     return device
 
@@ -44,17 +50,18 @@ def setFreeDevice():
     # take random if all show 0 ocupation
     if torch.cuda.is_available():
         count = torch.cuda.device_count()
-        mem_aloc = np.array([torch.cuda.memory_allocated(i) for i in range(count)])
+        mem_aloc = np.array([torch.cuda.memory_allocated(i)
+                            for i in range(count)])
         if np.all(mem_aloc == 0):
-            dev_ix = random.randrange(0,count)
+            dev_ix = random.randrange(0, count)
         else:
             dev_ix = np.argmin(mem_aloc)
-        torch.cuda.set_device(dev_ix)
-
+        device = torch.device(f"cuda:{dev_ix}")
+        torch.cuda.set_device(device)
 
 
 def sendToDevice(torchObjList, device=None):
-    device = device or getDevice()
+    device = device or getCurrentDevice()
     for obj in torchObjList:
         obj.to(device)
 
@@ -96,10 +103,11 @@ def loadPklModel(file_path, model_dir=None):
         file_path += '.pkl'
     return loadPkl(file_path)
 
+
 def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, device=None):
     # XXX on main_multi.py, this is called at each epoch begining
     # Which one is correct?
-    device = device or getDevice()
+    device = device or getCurrentDevice()
     model.train()
     best_validation = 0
     for e in range(n_epochs):
@@ -126,7 +134,7 @@ def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, dev
 
 
 def ClfPrediction(model, data_x, device=None):
-    device = device or getDevice()
+    device = device or getCurrentDevice()
     pred_all = []
     model.eval()
     for x in data_x:
@@ -136,8 +144,9 @@ def ClfPrediction(model, data_x, device=None):
         pred_all.append((pred.argmax(1)).cpu().detach().numpy())
     return np.concatenate(pred_all, axis=0)
 
+
 def ClfPredProba(model, data_x, device=None):
-    device = device or getDevice()
+    device = device or getCurrentDevice()
     pred_all = []
     model.eval()
     for x in data_x:
@@ -149,8 +158,9 @@ def ClfPredProba(model, data_x, device=None):
     pred_all = np.concatenate(pred_all, axis=0)
     return pred_all
 
+
 def evaluate(model, data_xy, device=None):
-    device = device or getDevice()
+    device = device or getCurrentDevice()
     labels = []
     pred_tot = []
     model.eval()
@@ -165,7 +175,7 @@ def evaluate(model, data_xy, device=None):
 
 
 def generateCF(noiser, loader, device=None):
-    device = device or getDevice()
+    device = device or getCurrentDevice()
     dataCF = []
     noiser.eval()
     for x_batch in loader:
@@ -180,7 +190,7 @@ def generateCF(noiser, loader, device=None):
 
 def predictionAndCF(model, noiser, data, device=None):
     """from ExtractCF.py, more complete than the one from generateCF.py"""
-    device = device or getDevice()
+    device = device or getCurrentDevice()
     labels = []
     pred_tot = []
     dataCF = []
@@ -229,7 +239,7 @@ def predictionAndCF(model, noiser, data, device=None):
 
 
 def generateOrigAndAdd(model, noiser, train, device=None):
-    device = device or getDevice()
+    device = device or getCurrentDevice()
     data = []
     dataCF = []
     prediction_cf = []
@@ -261,4 +271,39 @@ def computeOrig2pred(orig_label, pred):
     return hashOrig2Pred
 
 
+def loadPreds(model_name, split, year):
+    base_dir = Path("data")
+    out_name = f'y_pred_{split}_{year}_{model_name}.npy'
+    out_path = Path(base_dir, out_name)
+    if not out_path.exists():
+        # compute predictions if they do not exist
+        # load data
+        fullData = loadAllDataNpy(split=split, year=year)
+        data = npyData2DataLoader(fullData[split].X, batch_size=1048)
+        # load model
+        setFreeDevice()
+        model = S2Classif(n_class=fullData['n_classes'], dropout_rate=.5)
+        model.to(getCurrentDevice())
+        loadWeights(model, args.model_name)
+        y_pred = ClfPrediction(model, data)
+        return y_pred
+    else:
+        return np.load(out_path)
+
+
+def savePreds(model_name, split, year):
+    base_dir = Path("data")
+    out_name = f'y_pred_{split}_{year}_{model_name}.npy'
+    out_path = Path(base_dir, out_name)
+    print(out_path)
+
+    fullData = loadAllDataNpy(year=year, squeeze=False)
+    # Load model
+    setFreeDevice()
+    model = S2Classif(n_class=fullData['n_classes'], dropout_rate=.5)
+    model.to(getCurrentDevice())
+    loadWeights(model, model_name)
+    y_pred = ClfPrediction(
+        model, npyData2DataLoader(fullData[args.split].X, batch_size=2048))
+    np.save(out_path, y_pred)
 

@@ -1,12 +1,11 @@
 """
+date: 2023-03-13 16:39:09
+
 Script to run our experiments using the kNN based CF generator from Karlsson et al 2020
 
 Their CF models are implemented in a package called wildboar, that can be installed with pip.
 
 For more info please see notes_on_Karlsons_code.md
-
-author: tdrumond
-date: 2023-03-13 16:39:09
 
 """
 import os
@@ -26,7 +25,7 @@ from cfsits_tools.cli import getBasicParser
 from cfsits_tools.data import loadAllDataNpy, VALID_SPLITS, npyData2DataLoader, loadSplitNpy
 from cfsits_tools.metrics import compactness, metricsReport, plausibility, proximity, stability, validity
 from cfsits_tools.model import S2Classif
-from cfsits_tools.utils import loadWeights, savePklModel, loadPklModel, ClfPrediction, getDevice, ClfPrediction, setFreeDevice
+from cfsits_tools.utils import loadWeights, savePklModel, loadPklModel, ClfPrediction, getCurrentDevice, ClfPrediction, setFreeDevice
 
 
 from ExtractCF import produceResults
@@ -70,7 +69,7 @@ def predictCfSamples(args):
     # load classification model
     setFreeDevice()
     model = S2Classif(fullData["n_classes"])
-    model.to(getDevice())
+    model.to(getCurrentDevice())
     loadWeights(model, file_path=args.model_name)
     y_pred = ClfPrediction(model, npyData2DataLoader(X, batch_size=2048))
 
@@ -190,7 +189,7 @@ def getResults(args):
     # Load model and make predictions
     setFreeDevice()
     model = S2Classif(n_class=len(np.unique(y_true)), dropout_rate=.5)
-    model.to(getDevice())
+    model.to(getCurrentDevice())
     loadWeights(model, args.model_name)
     y_pred = ClfPrediction(model, dataloader)
 

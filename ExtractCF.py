@@ -14,7 +14,7 @@ from sklearn.neighbors import NearestNeighbors
 from cfsits_tools.cli import getBasicParser
 from cfsits_tools.metrics import compactness, metricsReport, plausibility, proximity, stability, validity
 from cfsits_tools.model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
-from cfsits_tools.utils import ClfPrediction, getDevice, loadWeights, predictionAndCF, setFreeDevice
+from cfsits_tools.utils import ClfPrediction, getCurrentDevice, loadWeights, predictionAndCF, setFreeDevice
 from cfsits_tools.viz import extractTransitions, plotSomeCFExamples, plotSomeFailedCFExamples, printConfMatrix, printSomeMetrics, writeChord, writeImages
 from cfsits_tools.data import loadAllDataNpy, loadSplitNpy, npyData2DataLoader, VALID_SPLITS
 
@@ -70,14 +70,14 @@ def main(args):
     # Load model
     logging.info('Loading classifier')
     model = S2Classif(n_class=len(np.unique(y_true)), dropout_rate=.5)
-    model.to(getDevice())
+    model.to(getCurrentDevice())
     loadWeights(model, args.model_name)
 
     # load noiser
     logging.info('Loading noiser')
     n_timestamps = X.shape[-1]
     noiser = Noiser(n_timestamps, .3)
-    noiser.to(getDevice())
+    noiser.to(getCurrentDevice())
     loadWeights(noiser, args.noiser_name)
 
     # CF data of the chosen split

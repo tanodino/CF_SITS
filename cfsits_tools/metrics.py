@@ -1,5 +1,4 @@
 """
-author : tdrumond
 date: 2023-03-28 12:07:47
 
 Functions to compute metrics on the generated counterfactuals
@@ -220,4 +219,7 @@ def metricsReport(X, Xcf, y_cf_pred,
 
         stability_avg = np.mean(calc_metric(
             stability, k=k, nnX=nnX, nnXcf=nnXcf))
-        logging.info(f"avg stability: {stability_avg:0.4f}")
+    else:
+        stability_avg = np.mean(
+            stability(X=X, Xcf=Xcf, k=k, nnX=nnX, nnXcf=nnXcf))
+    logging.info(f"avg stability: {stability_avg:0.4f}")
