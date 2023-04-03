@@ -80,7 +80,7 @@ from cfsits_tools.viz import DATES, NAMES
 
 candidate_idx = [
     # shown in the paper:
-    19201, 15685, 26033,
+    19201, 15658, 26033,
     # other interesting cases:
     # 256, 860,1414,1419,1435,2511,2911,2912,5222,
     # 5825,6393,8564,9275,9292,9307,11758,15544,15658,19201,
@@ -113,11 +113,9 @@ for k in candidate_idx:
     axs[1].plot(DATES, NG_dataCF[k], label=f'NG({NAMES[NG_sink_k]})')
     # Ax2 - kNN
     if skipNN:
-        axs[2].plot(DATES, X[k], label=f'Real ({NAMES[source_k]})')
         axs[2].plot(DATES, NN_dataCF[k_NN_NG], 
                     label=f'k-NNC ({NAMES[NN_sink_k_NG]})')
     else:
-        axs[2].plot(DATES, X[k], label=f'Real ({NAMES[source_k]})')
         axs[2].plot(DATES, NN_dataCF[k_NN], label=f'k-NNC ({NAMES[NN_sink_k]})')
     # format fig presentation
     for ax in axs:
