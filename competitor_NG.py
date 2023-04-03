@@ -191,10 +191,11 @@ def loadCFs(cfs_path, split, use_cam=False, slice=None):
 
 def joinNGCFFiles(root_dir, use_cam=False):
     pat = 'NGCAM*_slice_*.npy' if use_cam else 'NGCF*_slice_*.npy'
-    files = glob(pat, root_dir=root_dir)
+    pat = os.path.join(root_dir, pat)
+    files = glob(pat)
     files.sort()
     if files:
-        arr = [np.load(Path(root_dir, fname)) for fname in files]
+        arr = [np.load(fpath) for fpath in files]
         arr = np.concatenate(arr, axis=0)
         if len(files) != NSLICES:
             logging.warning(
