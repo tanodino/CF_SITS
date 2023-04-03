@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 from cfsits_tools.data import loadAllDataNpy, npyData2DataLoader
 from cfsits_tools.model import S2Classif
-from competitor_NG import args
+
 
 
 DEFAULT_MODEL_DIR = "models"
@@ -278,13 +278,13 @@ def loadPreds(model_name, split, year):
     if not out_path.exists():
         # compute predictions if they do not exist
         # load data
-        fullData = loadAllDataNpy(split=split, year=year)
+        fullData = loadAllDataNpy(year=year)
         data = npyData2DataLoader(fullData[split].X, batch_size=1048)
         # load model
         setFreeDevice()
         model = S2Classif(n_class=fullData['n_classes'], dropout_rate=.5)
         model.to(getCurrentDevice())
-        loadWeights(model, args.model_name)
+        loadWeights(model, model_name)
         y_pred = ClfPrediction(model, data)
         return y_pred
     else:
@@ -304,6 +304,6 @@ def savePreds(model_name, split, year):
     model.to(getCurrentDevice())
     loadWeights(model, model_name)
     y_pred = ClfPrediction(
-        model, npyData2DataLoader(fullData[args.split].X, batch_size=2048))
+        model, npyData2DataLoader(fullData[split].X, batch_size=2048))
     np.save(out_path, y_pred)
 
