@@ -26,9 +26,9 @@ DATES = pd.to_datetime(
             20201021, 20201031, 20201115, 20201130, 20201215, 20201230],
             format='%Y%m%d')
 NAMES = ["Cereals", "Cotton", "Oleaginous", "Grassland",
-        "Shrubland", "Forest", "Built-up", "Water"] 
+        "Shrubland", "Forest", "Bare soil", "Water"] 
 NAMES_CHORD = ["CEREALS", "COTTON", "OLEAGINOUS", "GRASSLAND",
-        "SHRUBLAND", "FOREST", "B.", "W."]  # "BUILT-UP", "WATER"
+        "SHRUBLAND", "FOREST", "B.", "W."]  # "BARE SOIL", "WATER"
 
 
 
