@@ -1,7 +1,7 @@
 This repo contains code used to perform experiments in our paper about generating counterfactual explanations in the context of time-series remote sensing multiclass data. 
 # Instructions to reproduce paper results
 1. **Set up virtual environment**:  
-`conda create -f environment.yml && conda activate cf-env`
+`conda env create -f environment.yml && conda activate cf-env`
 2. **Produce CFE4SITS results**:  
 `python ExtractCF.py --do-plots`
 3. **Produce NG results**:  _Disclaimer: takes several hours to complete._
