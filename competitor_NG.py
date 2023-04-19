@@ -412,7 +412,7 @@ class CAMMixer():
         return X_example
 
     def _findSubarray(self, array, k):
-        # used to find the maximum contigious subarray of length k in the explanation weight vector
+        # used to find the maximum contiguous subarray of length k in the explanation weight vector
 
         # Iterate to find all the sub-arrays
         n = len(array)
@@ -431,11 +431,11 @@ def native_guide_retrieval(
     X_not_label = X_train[y_train != pred_label]
     original_indexes = np.where(y_train != pred_label)[0]
 
-    # finding the nearest unlike neighbour.
+    # finding the nearest unlike neighbor.
     knn = KNeighborsTimeSeries(n_neighbors=n_neighbors, metric=distance)
     knn.fit(X_not_label)
     dist, ind = knn.kneighbors(query.reshape(1, -1), return_distance=True)
-    # return the distance and the index in the orginal data
+    # return the distance and the index in the original data
     return dist[0], original_indexes[ind[0]]
 
 
