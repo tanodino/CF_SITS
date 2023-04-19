@@ -7,13 +7,13 @@ This repo contains code used to perform experiments in our paper about generatin
 3. **Produce NG results**:  _Disclaimer: takes several hours to complete._
 `python competitor_NG.py pred --use-cam && python competitor_NG.py results --use-cam`
 4. **Produce k-NNC results**:
-`python competitor_knn.py train && python competitor_knn.py pred && python competitor_NG.py results`
+`python competitor_knn.py train && python competitor_knn.py pred && python competitor_knn.py results`
 5.**To generate comparative plots**
 `python selected_plots.py`
 
 All plots get saved in the folder `img`. A metrics summary is logged both to the standard output and to a text file in `logs`.
 
-# Codebase descritption
+# Codebase description
 The project can be divided into the following functional blocks:
 1. **[Model training]** Training a classifier model
 2. **[Noiser training]** Training the counterfactual generative model based on an existing classifier
