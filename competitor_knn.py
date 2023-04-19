@@ -35,8 +35,10 @@ def trainCfModel(args):
     # Load data
     fullData = loadAllDataNpy(year=args.year)
 
+    setFreeDevice()
     # load classification model
     model = S2Classif(fullData["n_classes"])
+    model.to(getCurrentDevice())
     loadWeights(model, file_path=args.model_name)
 
     # wrap model for wildboar
@@ -316,6 +318,7 @@ def getNoiserName(args):
 if __name__ == "__main__":
     LOG_DIR = os.path.join('logs', os.path.basename(
         os.path.splitext(__file__)[0]))
+    os.makedirs(LOG_DIR, exist_ok=True)
 
     parser = getBasicParser()
     parser.set_defaults(noiser_name='noiser_knn')
