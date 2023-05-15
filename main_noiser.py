@@ -21,8 +21,8 @@ import matplotlib.pyplot as plt
 
 from cfsits_tools.model import MLPClassif, MLPBranch, Noiser, Discr, S2Classif
 from cfsits_tools.loss import discriminator_loss, generator_loss
-from cfsits_tools.utils import generateOrigAndAdd
-from cfsits_tools.data import loadSplitNpy, extractNDVI
+from cfsits_tools.utils import generateOrigAndAdd, ClfPrediction
+from cfsits_tools.data import loadSplitNpy, extractNDVI, npyData2DataLoader
 #torch.save(model.state_dict(), PATH)
 
 #model = TheModelClass(*args, **kwargs)
@@ -33,7 +33,7 @@ MODEL_DIR = 'models'
 DATA_DIR = 'data'
 LOG_DIR = os.path.join('logs', os.path.basename(os.path.splitext(__file__)[0]))
 
-def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, reg_uni, optimizer, optimizerD, loss_bce, n_timestamps, device, path_file):
+def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, reg_uni, optimizer, optimizerD, loss_bce, n_timestamps, device, path_file, loss_cl_type="log"):
     model.eval()
     noiser.train()
     discr.train()
@@ -69,9 +69,13 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, r
             prob_cl = torch.nn.functional.softmax(pred_cl,dim=1)
             y_ohe = F.one_hot(y_batch.long(), num_classes=n_classes)
             prob = torch.sum(prob_cl * y_ohe,dim=1)
-            loss_classif = torch.mean( -torch.log( 1. - prob + torch.finfo(torch.float32).eps ) )
-            #loss = 
 
+            if loss_cl_type == "log":
+                loss_classif = torch.mean( -torch.log( 1. - prob + torch.finfo(torch.float32).eps ) )
+            else: # margin loss
+                max_other = torch.max(prob_cl * (1-y_ohe))
+                loss_classif = torch.mean( -torch.log( 1. - torch.maximum(prob + 0.1 -max_other, torch.tensor(0)) + torch.finfo(torch.float32).eps ) )
+    
             #Entropy regularizer
             reg_entro = torch.mean( torch.sum( torch.special.entr(prob_cl), dim=1) )
             
@@ -252,6 +256,8 @@ def main(argv):
     reg_uni = float(argv[2]) if len(argv) > 2 else 0.05
     path_file_noiser = argv[3] if len(argv) > 3 else "noiser_weights"
     shrink = bool(argv[4]) if len(argv) > 4 else False
+    use_ypred = bool(argv[5]) if len(argv) > 5 else False
+    loss_cl_type = argv[6] if len(argv) > 6 else "log"
 
 
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -288,15 +294,6 @@ def main(argv):
     
     x_valid = torch.Tensor(x_valid) # transform to torch tensor
     y_valid = torch.Tensor(y_valid)
-
-    train_dataset = TensorDataset(x_train, y_train) # create your datset
-    #test_dataset = TensorDataset(x_test, y_test) # create your datset
-    valid_dataset = TensorDataset(x_valid, y_valid) # create your datset
-
-
-    train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=128)
-    valid_dataloader = DataLoader(valid_dataset, shuffle=False, batch_size=64)
-    #test_dataloader = DataLoader(test_dataset, shuffle=False, batch_size=2048)
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     #model1 = MLPBranch(.5)
@@ -307,28 +304,41 @@ def main(argv):
     model.to(device)
     noiser.to(device)
     discr.to(device)
-    #model1.to(device)
-    #optimizer = torch.optim.Adam(model.parameters(), lr=0.00001, weight_decay=1e-4)
-    
-    optimizer = torch.optim.Adam(noiser.parameters(), lr=0.0001, weight_decay=1e-4)
-    optimizerD = torch.optim.Adam(discr.parameters(), lr=0.0001, weight_decay=1e-4)
-    
-    loss_ce = nn.CrossEntropyLoss().to(device)
-    loss_bce = nn.BCELoss().to(device)
-    n_epochs = 100
-    #file_path = "model_weights"
+
     file_path = "model_weights_tempCNN"
-    #file_path = "model_weights"
     file_path = os.path.join(MODEL_DIR, file_path)
     model.load_state_dict(torch.load(file_path))
     for p in model.parameters():
         p.requires_grad = False
 
+    if use_ypred:
+        y_pred_train = ClfPrediction(model,npyData2DataLoader(x_train, batch_size=2048),device)
+        y_pred_train = torch.Tensor(y_pred_train)
+    else:
+        y_pred_train = y_train
+
+    train_dataset = TensorDataset(x_train, y_pred_train) # y_train # create your datset
+    #test_dataset = TensorDataset(x_test, y_test) # create your datset
+    valid_dataset = TensorDataset(x_valid, y_valid) # create your datset
+
+
+    train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=128)
+    valid_dataloader = DataLoader(valid_dataset, shuffle=False, batch_size=64)
+    #test_dataloader = DataLoader(test_dataset, shuffle=False, batch_size=2048)
+
+
+    optimizer = torch.optim.Adam(noiser.parameters(), lr=0.0001, weight_decay=1e-4)
+    optimizerD = torch.optim.Adam(discr.parameters(), lr=0.0001, weight_decay=1e-4)
+    
+    #loss_ce = nn.CrossEntropyLoss().to(device)
+    loss_bce = nn.BCELoss().to(device)
+    n_epochs = 100
+
     path_file_noiser = os.path.join(MODEL_DIR, path_file_noiser)
     #trainModel(model, train_dataloader, valid_dataloader, n_epochs, loss_ce, optimizer, file_path, device)
     trainModelNoise(model, noiser, discr, train_dataloader, n_epochs, n_classes, reg_gen, reg_uni,
-                    optimizer, optimizerD, loss_bce, n_timestamps, device, path_file_noiser)
-    
+                    optimizer, optimizerD, loss_bce, n_timestamps, device, path_file_noiser, loss_cl_type)
+       
     #print( model.parameters() )
     #exit()
     '''
