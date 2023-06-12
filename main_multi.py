@@ -25,9 +25,9 @@ MODEL_DIR = 'models'
 DATA_DIR = 'data'
 
 def trainModelClassif(model, train, valid, n_epochs, loss_ce, optimizer, path_file, device):
+    model.train()
     best_validation = 0
     for e in range(n_epochs):
-        model.train()        
         loss_acc = []
         for x_batch, y_batch in train:
             model.zero_grad()

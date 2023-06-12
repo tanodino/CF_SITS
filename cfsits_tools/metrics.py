@@ -198,7 +198,7 @@ def metricsReport(X, Xcf, y_pred=None, y_pred_cf=None, ifX=None,
         logging.info(f"avg validity: {validity_avg:0.4f}")
 
     # Compactness
-    for threshold in [1e-2]: #  1e-3, 1e-4, 1e-8
+    for threshold in [1e-2, 1e-4, 1e-8]: #  1e-3, 1e-4, 1e-8
         compactness_avg = np.mean(compactness(
             X, Xcf, threshold=threshold))
         logging.info(f"avg compactness @ threshold={threshold:0.1e}: {compactness_avg:0.4f}")

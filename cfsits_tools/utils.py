@@ -105,8 +105,6 @@ def loadPklModel(file_path, model_dir=None):
 
 
 def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, device=None):
-    # XXX on main_multi.py, this is called at each epoch begining
-    # Which one is correct?
     device = device or getCurrentDevice()
     model.train()
     best_validation = 0
