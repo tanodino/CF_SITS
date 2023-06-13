@@ -123,8 +123,12 @@ if __name__ == "__main__":
         action='store_true',
         default=False,
         help='To be used when the Noiser was trained with shrink=True'
-    )    
-
+    )
+    parser.add_argument(
+        '--logfile',
+        default='log.txt',
+        help='Choose logging file name'
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -133,7 +137,7 @@ if __name__ == "__main__":
         datefmt='%Y/%m/%d %H:%M:%S',
         handlers=[
             logging.FileHandler(
-                Path(LOG_DIR, 'log.txt'), mode="w"
+                Path(LOG_DIR, args.logfile), mode="w"
             ),
             logging.StreamHandler(sys.stdout)
         ]

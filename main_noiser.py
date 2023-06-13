@@ -33,7 +33,7 @@ MODEL_DIR = 'models'
 DATA_DIR = 'data'
 LOG_DIR = os.path.join('logs', os.path.basename(os.path.splitext(__file__)[0]))
 
-def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, reg_uni, optimizer, optimizerD, loss_bce, n_timestamps, device, path_file, loss_cl_type="log"):
+def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, reg_uni, optimizer, optimizerD, loss_bce, n_timestamps, device, path_file, loss_cl_type="log",margin=0.1,do_plots=False):
     model.eval()
     noiser.train()
     discr.train()
@@ -74,7 +74,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, r
                 loss_classif = torch.mean( -torch.log( 1. - prob + torch.finfo(torch.float32).eps ) )
             else: # margin loss
                 max_other = torch.max(prob_cl * (1-y_ohe))
-                loss_classif = torch.mean( -torch.log( 1. - torch.maximum(prob + 0.1 -max_other, torch.tensor(0)) + torch.finfo(torch.float32).eps ) )
+                loss_classif = torch.mean( -torch.log( 1. - torch.maximum(prob + margin -max_other, torch.tensor(0)) + torch.finfo(torch.float32).eps ) )
     
             #Entropy regularizer
             reg_entro = torch.mean( torch.sum( torch.special.entr(prob_cl), dim=1) )
@@ -232,32 +232,39 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, r
         ex_cfcl = pred_cf[idx]
 
         #Central time histogram
-        plt.clf()
-        t_avg_all = np.concatenate(t_avg_all,axis=0)
-        plt.hist(t_avg_all.squeeze(), bins=np.concatenate(([-.5],np.arange(n_timestamps))))
-        plt.savefig(os.path.join(LOG_DIR, "epoch_%d_t_avg_hist.jpg"%(e) ))
+        if do_plots:
+            plt.clf()
+            t_avg_all = np.concatenate(t_avg_all,axis=0)
+            plt.hist(t_avg_all.squeeze(), bins=np.concatenate(([-.5],np.arange(n_timestamps))))
+            plt.savefig(os.path.join(LOG_DIR, "epoch_%d_t_avg_hist.jpg"%(e) ))
 
-        plt.clf()
-        plt.plot(np.arange(len(sample)), sample,'b')
-        plt.plot(np.arange(len(sampleCF)), sampleCF,'r')
-        plt.savefig(os.path.join(LOG_DIR, "epoch_%d_from_cl_%d_2cl_%d.jpg"%(e, ex_cl, ex_cfcl) ))
-        #plt.waitforbuttonpress(0) # this will wait for indefinite time
-        #plt.close(fig)
-        #exit()
-        torch.save(noiser.state_dict(), path_file)
-        sys.stdout.flush()
+            plt.clf()
+            plt.plot(np.arange(len(sample)), sample,'b')
+            plt.plot(np.arange(len(sampleCF)), sampleCF,'r')
+            plt.savefig(os.path.join(LOG_DIR, "epoch_%d_from_cl_%d_2cl_%d.jpg"%(e, ex_cl, ex_cfcl) ))
+            #plt.waitforbuttonpress(0) # this will wait for indefinite time
+            #plt.close(fig)
+            #exit()
+            torch.save(noiser.state_dict(), path_file)
+            sys.stdout.flush()
 
 
 
 def main(argv):
     year = 2020#int(argv[1])
 
-    reg_gen = float(argv[1]) if len(argv) > 1 else 0.5
-    reg_uni = float(argv[2]) if len(argv) > 2 else 0.05
-    path_file_noiser = argv[3] if len(argv) > 3 else "noiser_weights"
-    shrink = bool(argv[4]) if len(argv) > 4 else False
-    use_ypred = bool(argv[5]) if len(argv) > 5 else False
-    loss_cl_type = argv[6] if len(argv) > 6 else "log"
+    shrink = bool(argv[3]) if len(argv) > 3 else False
+    if shrink:
+        reg_gen = float(argv[1]) if len(argv) > 1 else 0.5
+        reg_uni = float(argv[2]) if len(argv) > 2 else 0.05
+    else:
+        reg_gen = float(argv[1]) if len(argv) > 1 else 0.0002
+        reg_uni = float(argv[2]) if len(argv) > 2 else 0.00002
+    loss_cl_type = argv[4] if len(argv) > 4 else "margin" # or 'log'
+    margin = float(argv[5]) if len(argv) > 5 else 0.1
+    path_file_noiser = argv[6] if len(argv) > 6 else "noiser_weights"
+    use_ypred = bool(argv[7]) if len(argv) > 7 else True
+    do_plots = bool(argv[8]) if len(argv) > 8 else False
 
 
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -337,7 +344,7 @@ def main(argv):
     path_file_noiser = os.path.join(MODEL_DIR, path_file_noiser)
     #trainModel(model, train_dataloader, valid_dataloader, n_epochs, loss_ce, optimizer, file_path, device)
     trainModelNoise(model, noiser, discr, train_dataloader, n_epochs, n_classes, reg_gen, reg_uni,
-                    optimizer, optimizerD, loss_bce, n_timestamps, device, path_file_noiser, loss_cl_type)
+                    optimizer, optimizerD, loss_bce, n_timestamps, device, path_file_noiser, loss_cl_type,margin,do_plots)
        
     #print( model.parameters() )
     #exit()
