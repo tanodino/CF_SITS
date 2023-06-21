@@ -128,3 +128,24 @@ def loadAllDataloaders(data_path=None, year=2020, **loader_kwargs):
            for split in VALID_SPLITS}
     )
     return dataloaders
+
+
+def load_UCR_dataset(name, split):
+    UCR_DIR = "UCRArchive_2018"
+    data_path = data_path or DEFAULT_DATA_DIR
+    path = Path(
+        data_path, UCR_DIR,
+        name, f"{name}_{split}.tsv"
+    )
+    data = np.loadtxt(path, delimiter='\t')
+    X, y = data[:, 1:], data[:, 0].astype('int')
+    labels = np.unique(y)
+    if labels[0] == 1:
+        y -= 1
+    elif np.all(labels == [-1, 1]):
+        y = (y+1)//2
+    elif np.all(labels == [3, 4, 5, 6, 7, 8]) :
+        y -= 3
+
+    return datatuple(X, y)
+
