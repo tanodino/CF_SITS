@@ -130,7 +130,7 @@ def loadAllDataloaders(data_path=None, year=2020, **loader_kwargs):
     return dataloaders
 
 
-def load_UCR_dataset(name, split):
+def load_UCR_dataset(name, split, data_path=None):
     UCR_DIR = "UCRArchive_2018"
     data_path = data_path or DEFAULT_DATA_DIR
     path = Path(
