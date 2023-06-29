@@ -1,6 +1,15 @@
 # project specific
 logs/
 img/
+data/UCRArchive_2018
+data/y_pred*
+model/model_weights___*
+model/noiser_weights___*
+
+# Extra vscode ignores
+*.code-workspace
+# vscode debugger configs
+launch.json
 
 # python specific
 # from github template 
