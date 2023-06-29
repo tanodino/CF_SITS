@@ -1,9 +1,12 @@
 #KOUMBIA
+import logging
+from pathlib import Path
 import numpy as np
 #import tensorflow as tf
 import torch
 import torch.nn as nn
 import os
+from shutil import copy2
 import sys
 from sklearn.metrics import f1_score
 from sklearn.utils import shuffle
@@ -17,10 +20,11 @@ import torch.nn.functional as F
 #import matplotlib
 #matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
-
-from cfsits_tools.model import S2Classif, MLPClassif
-from cfsits_tools.utils import trainModel
-from cfsits_tools.data import loadSplitNpy, extractNDVI
+from cfsits_tools import utils, cli
+from cfsits_tools.log import saveCopyWithParams, setupLogger
+from cfsits_tools.model import Inception, S2Classif, MLPClassif
+from cfsits_tools.data import DEFAULT_DATA_DIR, load_UCR_dataset, loadSplitNpy, extractNDVI, npyData2DataLoader
+from cfsits_tools.utils import evaluate, getCurrentDevice, saveWeights
 
 #torch.save(model.state_dict(), PATH)
 
@@ -28,54 +32,101 @@ from cfsits_tools.data import loadSplitNpy, extractNDVI
 #model.load_state_dict(torch.load(PATH))
 #model.eval()
 
-MODEL_DIR = 'models'
-DATA_DIR = 'data'
+MODEL_DIR = utils.DEFAULT_MODEL_DIR
+DATA_DIR = DEFAULT_DATA_DIR
 
-def main(argv):
-    year = 2020#int(argv[1])
-    
-    x_train, y_train = loadSplitNpy('train', data_path=DATA_DIR, year=year)
-    x_valid, y_valid = loadSplitNpy('valid', data_path=DATA_DIR, year=year)
-    x_test, y_test = loadSplitNpy('test', data_path=DATA_DIR, year=year)
-    
+
+def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, device=None):
+    device = device or utils.getCurrentDevice()
+    model.train()
+    best_validation = 0
+    for e in range(n_epochs):
+        loss_acc = []
+        for x_batch, y_batch in train:
+            model.zero_grad()
+            x_batch = x_batch.to(device)
+            y_batch = y_batch.to(device)
+            pred = model(x_batch)
+            loss = loss_ce(pred, y_batch.long())
+            loss.backward()
+            optimizer.step()
+            loss_acc.append(loss.cpu().detach().numpy())
+
+        logger.info("epoch %d with loss %f" % (e, np.mean(loss_acc)))
+        score_valid = utils.evaluate(model, valid, device)
+        logger.info("\t val on VALIDATION %f" % score_valid)
+        if score_valid > best_validation:
+            best_validation = score_valid
+            utils.saveWeights(model, path_file)
+            logger.info("\t\t BEST VALID %f" % score_valid)
+
+        sys.stdout.flush()
+
+def launchTraining(args):
+    # Load data
+    if args.dataset == 'colza':
+        x_train, y_train = loadSplitNpy('train', data_path=DATA_DIR, year=args.year)
+        x_valid, y_valid = loadSplitNpy('valid', data_path=DATA_DIR, year=args.year)
+    else:  # load UCR dataset
+        x_train, y_train = load_UCR_dataset(args.dataset, split='train')
+        x_valid, y_valid = load_UCR_dataset(args.dataset, split='valid')
 
 
     n_classes = len(np.unique(y_train))
-    print(x_train.shape)
-
-
+    logger.info(f'x_train shape: {x_train.shape}')
 
     n_timestamps = x_train.shape[-1]
-    
-    x_train = torch.Tensor(x_train) # transform to torch tensor
-    y_train = torch.Tensor(y_train)
-    
-    x_valid = torch.Tensor(x_valid) # transform to torch tensor
-    y_valid = torch.Tensor(y_valid)
 
-    train_dataset = TensorDataset(x_train, y_train) # create your datset
-    #test_dataset = TensorDataset(x_test, y_test) # create your datset
-    valid_dataset = TensorDataset(x_valid, y_valid) # create your datset
-
-
-    train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=16)
-    valid_dataloader = DataLoader(valid_dataset, shuffle=False, batch_size=64)
-    #test_dataloader = DataLoader(test_dataset, shuffle=False, batch_size=2048)
     
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = S2Classif(n_classes, dropout_rate=.5)
-    #model = MLPClassif(n_classes, dropout_rate=.5)
+    train_dataloader = npyData2DataLoader(
+        x_train, y_train, 
+        shuffle=True, batch_size=args.batch_size)
+    valid_dataloader = npyData2DataLoader(
+        x_valid, y_valid, 
+        shuffle=False, batch_size=3*args.batch_size)
+
+    # device setup
+    utils.setFreeDevice()
+    device = utils.getCurrentDevice()
+
+    if args.model_arch == 'TempCNN':
+        model = S2Classif(n_classes, dropout_rate=args.dropout_rate)
+    elif args.model_arch == 'Inception':
+        model = Inception(n_classes)
+    elif args.model_arch == 'MLP':
+        model = MLPClassif(n_classes, dropout_rate=args.dropout_rate)
+    
     model.to(device)
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.00001, weight_decay=1e-4)
+    optimizer = torch.optim.Adam(
+        model.parameters(), 
+        lr=args.learning_rate, # see default value at cli.py
+        weight_decay=args.weight_decay # default value at cli.py
+    )
     
     loss_ce = nn.CrossEntropyLoss().to(device)
-    n_epochs = 1000
-    file_path = "model_weights_tempCNN"
-    #file_path = "model_weights"
-    file_path = os.path.join(MODEL_DIR, file_path)
-    trainModel(model, train_dataloader, valid_dataloader, n_epochs, loss_ce, optimizer, file_path, device)    
+
+    trainModel(model, train_dataloader, valid_dataloader, args.epochs, loss_ce, optimizer, args.model_name, device)
+    
+
+    
 
 
 if __name__ == "__main__":
-   main(sys.argv)
+    parser = cli.getBasicParser()
+    parser = cli.addTrainingArguments(parser)
+    parser = cli.addClfModelArguments(parser)
+    parser.set_defaults(learning_rate=0.00001, weight_decay=1e-4, epochs=1000, batch_size=16)
+    args = parser.parse_args()
+    # logging set up
+    logger = setupLogger(__file__, parser)
+    
+    logger.info(f"Setting manual seed={args.seed} for reproducibility")
+    utils.setSeed(args.seed)
+    
+    launchTraining(args)
+
+    # copy mode_weights file to include param info in the filename
+    weights_path = os.path.join(MODEL_DIR, args.model_name)    
+    saveCopyWithParams(weights_path, parser)
+
