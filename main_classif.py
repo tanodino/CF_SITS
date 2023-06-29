@@ -1,36 +1,16 @@
-#KOUMBIA
-import logging
-from pathlib import Path
+# KOUMBIA
 import numpy as np
-#import tensorflow as tf
 import torch
 import torch.nn as nn
 import os
-from shutil import copy2
 import sys
-from sklearn.metrics import f1_score
-from sklearn.utils import shuffle
-import time
-from sklearn.manifold import TSNE
 
-from torch.utils.data import TensorDataset, DataLoader
-
-import time
-import torch.nn.functional as F
-#import matplotlib
-#matplotlib.use('TkAgg')
-import matplotlib.pyplot as plt
 from cfsits_tools import utils, cli
 from cfsits_tools.log import saveCopyWithParams, setupLogger
 from cfsits_tools.model import Inception, S2Classif, MLPClassif
 from cfsits_tools.data import DEFAULT_DATA_DIR, load_UCR_dataset, loadSplitNpy, extractNDVI, npyData2DataLoader
 from cfsits_tools.utils import evaluate, getCurrentDevice, saveWeights
 
-#torch.save(model.state_dict(), PATH)
-
-#model = TheModelClass(*args, **kwargs)
-#model.load_state_dict(torch.load(PATH))
-#model.eval()
 
 MODEL_DIR = utils.DEFAULT_MODEL_DIR
 DATA_DIR = DEFAULT_DATA_DIR
@@ -62,27 +42,28 @@ def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, dev
 
         sys.stdout.flush()
 
+
 def launchTraining(args):
     # Load data
     if args.dataset == 'colza':
-        x_train, y_train = loadSplitNpy('train', data_path=DATA_DIR, year=args.year)
-        x_valid, y_valid = loadSplitNpy('valid', data_path=DATA_DIR, year=args.year)
+        x_train, y_train = loadSplitNpy(
+            'train', data_path=DATA_DIR, year=args.year)
+        x_valid, y_valid = loadSplitNpy(
+            'valid', data_path=DATA_DIR, year=args.year)
     else:  # load UCR dataset
         x_train, y_train = load_UCR_dataset(args.dataset, split='train')
         x_valid, y_valid = load_UCR_dataset(args.dataset, split='valid')
-
 
     n_classes = len(np.unique(y_train))
     logger.info(f'x_train shape: {x_train.shape}')
 
     n_timestamps = x_train.shape[-1]
 
-    
     train_dataloader = npyData2DataLoader(
-        x_train, y_train, 
+        x_train, y_train,
         shuffle=True, batch_size=args.batch_size)
     valid_dataloader = npyData2DataLoader(
-        x_valid, y_valid, 
+        x_valid, y_valid,
         shuffle=False, batch_size=3*args.batch_size)
 
     # device setup
@@ -95,38 +76,36 @@ def launchTraining(args):
         model = Inception(n_classes)
     elif args.model_arch == 'MLP':
         model = MLPClassif(n_classes, dropout_rate=args.dropout_rate)
-    
+
     model.to(device)
-    
+
     optimizer = torch.optim.Adam(
-        model.parameters(), 
-        lr=args.learning_rate, # see default value at cli.py
-        weight_decay=args.weight_decay # default value at cli.py
+        model.parameters(),
+        lr=args.learning_rate,  # see default value at cli.py
+        weight_decay=args.weight_decay  # default value at cli.py
     )
-    
+
     loss_ce = nn.CrossEntropyLoss().to(device)
 
-    trainModel(model, train_dataloader, valid_dataloader, args.epochs, loss_ce, optimizer, args.model_name, device)
-    
-
-    
+    trainModel(model, train_dataloader, valid_dataloader,
+               args.epochs, loss_ce, optimizer, args.model_name, device)
 
 
 if __name__ == "__main__":
     parser = cli.getBasicParser()
     parser = cli.addTrainingArguments(parser)
     parser = cli.addClfModelArguments(parser)
-    parser.set_defaults(learning_rate=0.00001, weight_decay=1e-4, epochs=1000, batch_size=16)
+    parser.set_defaults(learning_rate=0.00001,
+                        weight_decay=1e-4, epochs=1000, batch_size=16)
     args = parser.parse_args()
     # logging set up
     logger = setupLogger(__file__, parser)
-    
+
     logger.info(f"Setting manual seed={args.seed} for reproducibility")
     utils.setSeed(args.seed)
-    
+
     launchTraining(args)
 
     # copy mode_weights file to include param info in the filename
-    weights_path = os.path.join(MODEL_DIR, args.model_name)    
+    weights_path = os.path.join(MODEL_DIR, args.model_name)
     saveCopyWithParams(weights_path, parser)
-
