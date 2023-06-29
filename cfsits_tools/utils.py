@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-import sys
 import time
 import logging
 import pickle as pkl
@@ -38,7 +37,7 @@ def setSeed(seed=0):
 
 
 def getCurrentDevice() -> str:
-    # get current cuda device if available, or fallback to cpu
+    """Get current cuda device if available, or fallback to cpu"""
     device = torch.device(
         f"cuda:{torch.cuda.current_device()}"
         if torch.cuda.is_available() else "cpu")
@@ -46,8 +45,10 @@ def getCurrentDevice() -> str:
 
 
 def setFreeDevice():
-    # globally set a free gpu as device (if available)
-    # take random if all show 0 ocupation
+    """
+    Globally set a free gpu as device (if available).
+    Take random if all show 0 ocupation.
+    """
     if torch.cuda.is_available():
         count = torch.cuda.device_count()
         mem_aloc = np.array([torch.cuda.memory_allocated(i)
@@ -61,6 +62,12 @@ def setFreeDevice():
 
 
 def sendToDevice(torchObjList, device=None):
+    """Send list of objects to device
+
+    Args:
+        torchObjList (Iterable): a list(-like) object containing multiple torch objects.
+        device (str or TorchDevice, optional): Destination device. If None, the current device is taken with getCurrentDevice. Defaults to None.
+    """
     device = device or getCurrentDevice()
     for obj in torchObjList:
         obj.to(device)
@@ -71,6 +78,13 @@ def loadWeights(model, file_path, model_dir=None):
     file_path = os.path.join(model_dir, file_path)
     model.load_state_dict(torch.load(file_path))
     logging.info(f"Loaded weights from {file_path}")
+
+
+def saveWeights(model, file_path, model_dir=None):
+    model_dir = model_dir or DEFAULT_MODEL_DIR
+    file_path = os.path.join(model_dir, file_path)
+    torch.save(model.state_dict(), file_path)
+    logging.info(f"Weights saved to {file_path}")
 
 
 def freezeModel(model):
@@ -102,33 +116,6 @@ def loadPklModel(file_path, model_dir=None):
     if not file_path.endswith('.pkl'):
         file_path += '.pkl'
     return loadPkl(file_path)
-
-
-def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, device=None):
-    device = device or getCurrentDevice()
-    model.train()
-    best_validation = 0
-    for e in range(n_epochs):
-        loss_acc = []
-        for x_batch, y_batch in train:
-            model.zero_grad()
-            x_batch = x_batch.to(device)
-            y_batch = y_batch.to(device)
-            pred = model(x_batch)
-            loss = loss_ce(pred, y_batch.long())
-            loss.backward()
-            optimizer.step()
-            loss_acc.append(loss.cpu().detach().numpy())
-
-        print("epoch %d with loss %f" % (e, np.mean(loss_acc)))
-        score_valid = evaluate(model, valid, device)
-        print("\t val on VALIDATION %f" % score_valid)
-        if score_valid > best_validation:
-            best_validation = score_valid
-            torch.save(model.state_dict(), path_file)
-            print("\t\t BEST VALID %f" % score_valid)
-
-        sys.stdout.flush()
 
 
 def ClfPrediction(model, data_x, device=None):
