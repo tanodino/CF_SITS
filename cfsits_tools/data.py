@@ -1,13 +1,16 @@
 from collections import namedtuple
+import os
 from types import SimpleNamespace
 from pathlib import Path
 import numpy as np
+from sklearn.model_selection import StratifiedShuffleSplit
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 
 DEFAULT_DATA_DIR = "data"
+UCR_DIR = "UCRArchive_2018"
 
 VALID_SPLITS = {'train', 'valid', 'test'}
 
@@ -22,7 +25,7 @@ def extractNDVI(x_train):
     return np.expand_dims(temp_data, 1)
 
 def _validate_split(split):
-    if split not in VALID_SPLITS:
+    if split.lower() not in VALID_SPLITS:
         raise ValueError(
             f"split should be one of {VALID_SPLITS} and not {split}")
 
@@ -34,6 +37,7 @@ def _fname(x_or_y, split, year=2020):
 def loadOneNpy(
         x_or_y, split, data_path=None, year=2020, ndvi=True, squeeze=False, 
         ch_first=True, y_float=False):
+    _validate_split(split)
     data_path = data_path or DEFAULT_DATA_DIR
     path = Path(data_path, _fname(x_or_y, split, year))
     data = np.load(path)
@@ -54,7 +58,6 @@ def loadOneNpy(
 
 
 def loadSplitNpy(split,  **load_kwargs):
-    _validate_split(split)
     X = loadOneNpy('x', split, **load_kwargs)
     y = loadOneNpy('y', split, **load_kwargs)
     return datatuple(X, y)
@@ -90,6 +93,16 @@ def loadAllDataNpy(**load_kwargs):
 
 
 def npyData2Dataset(X, y=None):
+    """Converts a dataset in numpy format to TensorDataset (from torch.utils.data).
+    A 3rd dimension (channels) is added if the given X array is 2D.
+
+    Args:
+        X (ndarray): Array containing data samples. If 2D, should have shape (n_samples x n_timesteps). If 3D, should have shape (n_samples x 1 x n_timesteps)
+        y (ndarray, optional): _description_. Defaults to None.
+
+    Returns:
+        TensorDataset: torch object containing both X and y in torch.Tensor form. 
+    """
     if X.ndim == 2:
         X = X[:, np.newaxis, :]
     X = torch.Tensor(X)
@@ -102,6 +115,17 @@ def npyData2Dataset(X, y=None):
 
 
 def npyData2DataLoader(X, y=None, **loader_kwargs):
+    """Converts a dataset in numpy format to a DataLoader (from torch.utils.data).
+    A 3rd dimension (channels) is added if the given X array is 2D.
+
+    Args:
+        X (ndarray): Array containing data samples. If 2D, should have shape (n_samples x n_timesteps). If 3D, should have shape (n_samples x 1 x n_timesteps)
+        y (ndarray, optional): _description_. Defaults to None.
+        loader_kwargs: any keyword arguments taken by DataLoader (from torch.utils.data) such as shuffle, batch_size, etc.
+
+    Returns:
+        DataLoader: torch object containing both X and y, that can be iterated by batch.
+    """
     dataset = npyData2Dataset(X, y)
     dataloader = DataLoader(dataset, **loader_kwargs)
     return dataloader
@@ -131,14 +155,21 @@ def loadAllDataloaders(data_path=None, year=2020, **loader_kwargs):
 
 
 def load_UCR_dataset(name, split, data_path=None):
-    UCR_DIR = "UCRArchive_2018"
+    _validate_split(split)
+
     data_path = data_path or DEFAULT_DATA_DIR
+    # if split is valid, need to load train data file
+    file_split = 'TRAIN' if split.lower() == 'valid' else split.upper()
     path = Path(
         data_path, UCR_DIR,
-        name, f"{name}_{split}.tsv"
+        name, f"{name}_{file_split}.tsv"
     )
+    # load data from tsv file
     data = np.loadtxt(path, delimiter='\t')
+    # labels are in the first column
     X, y = data[:, 1:], data[:, 0].astype('int')
+    # not all datasets have labels in the same standard
+    # bellow they get standardized to be in range(0, n_classes)
     labels = np.unique(y)
     if labels[0] == 1:
         y -= 1
@@ -147,5 +178,27 @@ def load_UCR_dataset(name, split, data_path=None):
     elif np.all(labels == [3, 4, 5, 6, 7, 8]) :
         y -= 3
 
-    return datatuple(X, y)
+    # if split is train or valid, need to split TRAIN file in two parts before returning the result
+    if split.lower() == 'test':
+        return datatuple(X, y)
+    else:
+        splitter = StratifiedShuffleSplit(
+            n_splits=1, test_size=0.25, random_state=123)
+        train_idx, valid_idx = splitter.split(X, y)
+        if split.lower() == 'train':
+            return datatuple(X[train_idx], y[train_idx])
+        elif split.lower() == 'valid':
+            return datatuple(X[valid_idx], y[valid_idx])
 
+
+def list_UCR_datasets(data_path=None):
+    data_path = data_path or DEFAULT_DATA_DIR
+    datasets = os.listdir(os.path.join(data_path, UCR_DIR))
+    # Datasets within the following folder also exist in the root folder
+    # The root folder versions are raw with missing data and variable length
+    # thus being unsuitable to our experiments.
+    exclude = ['Missing_value_and_variable_length_datasets_adjusted']
+    exclude += os.listdir(os.path.join(data_path, UCR_DIR, exclude[0]))
+    datasets = list(filter(lambda x: x not in exclude, datasets))
+    datasets
+    return datasets
