@@ -8,8 +8,7 @@ model/noiser_weights___*
 
 # Extra vscode ignores
 *.code-workspace
-# vscode debugger configs
-launch.json
+
 
 # python specific
 # from github template 
