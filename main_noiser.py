@@ -341,7 +341,7 @@ if __name__ == "__main__":
     parser.set_defaults(epochs=100)
     parser.add_argument(
         '--img-path',
-        default=log.getLogdir(__file__)
+        default=log.getLogdir(__file__),
         help='Directory in which plots and figures are saved'
     )
     parser.add_argument(
