@@ -244,12 +244,23 @@ class BinaryClassif(nn.Module):
         output = self.cl(output)
         return self.sigmoid(output)
 
+
 class Discr(nn.Module):
-    def __init__(self, n_class, dropout_rate = 0.0, hidden_activation='relu', output_activation='softmax',
+    def __init__(self,
+                 dropout_rate=0.0,
+                 encoder='TempCNN',
+                 encoder_params=None,
+                 hidden_activation='relu',
+                 output_activation='softmax',
                  name='Discr',
                  **kwargs):
         super(Discr, self).__init__(**kwargs)
-        self.encoder = S2Branch(dropout_rate)
+        if encoder == 'TempCNN':
+            if encoder_params is None:
+                encoder_params = dict(dropout_rate=dropout_rate)
+            self.encoder = S2Branch(**encoder_params)
+        elif encoder == 'Inception':
+            self.encoder == Inception(**encoder_params)
         self.HeadBCl = BinaryClassif(dropout_rate=dropout_rate)
 
     def forward(self, inputs):
@@ -283,45 +294,56 @@ class Discr(nn.Module):
 
 
 class Noiser(nn.Module):
-    def __init__(self, dim, dropout_rate = 0.0, n_var=1, hidden_activation='relu', output_activation=None,
-                 name='Noiser', shrink=False,
+    def __init__(self,
+                 out_dim, 
+                 dropout_rate = 0.0, n_var=1, 
+                 hidden_activation='relu', output_activation=None,
+                 name='Noiser', shrink=False, base_arch='MLP',
                  **kwargs):
         super(Noiser, self).__init__(**kwargs)
         self.shrink = shrink
         hidden_dim = 128*n_var
+        # for now only MLP arch is supported
+        self.body=MLPBranch(
+            dropout_rate=dropout_rate, 
+            n_units=hidden_dim,
+            hidden_activation=hidden_activation,
+            batch_norm=True)
+        # This part is now done within MLPBranch
+        # self.flatten = nn.Flatten()
+        # self.dense1 = nn.LazyLinear(hidden_dim)
+        # self.bn1 = nn.BatchNorm1d(hidden_dim)
+        # #self.tanh1 = nn.Tanh()#nn.ReLU()
+        # self.activ1 = nn.ReLU()
+        # self.dp1 = nn.Dropout(dropout_rate)
 
-        self.flatten = nn.Flatten()
-        self.dense1 = nn.LazyLinear(hidden_dim)
-        self.bn1 = nn.BatchNorm1d(hidden_dim)
-        #self.tanh1 = nn.Tanh()#nn.ReLU()
-        self.tanh1 = nn.ReLU()
-        self.dp1 = nn.Dropout(dropout_rate)
-
-        self.dense2 = nn.LazyLinear(hidden_dim)
-        self.bn2 = nn.BatchNorm1d(hidden_dim)
-        #self.tanh2 = nn.Tanh()#nn.ReLU()
-        self.tanh2 = nn.ReLU()
+        # self.dense2 = nn.LazyLinear(hidden_dim)
+        # self.bn2 = nn.BatchNorm1d(hidden_dim)
+        # #self.tanh2 = nn.Tanh()#nn.ReLU()
+        # self.activ2 = nn.ReLU()
         self.dp2 = nn.Dropout(dropout_rate)
 
-        self.dense3 = nn.LazyLinear(dim)
+        self.dense3 = nn.LazyLinear(out_dim)
         self.tanh = nn.Tanh()
 
         if self.shrink:
             self.ST = nn.Softshrink(0.01)
 
-        self.unflatten = nn.Unflatten(-1,(n_var,int(dim/n_var)))
+        self.unflatten = nn.Unflatten(-1,(n_var,int(out_dim/n_var)))
 
     def forward(self, inputs):
-        output = self.flatten(inputs)
+        output = self.body(inputs)
+        # This part is now done within MLPBranch
+        # output = self.flatten(inputs)
         
-        output = self.dense1(output)
-        output = self.bn1(output)
-        output = self.tanh1(output)
-        output = self.dp1(output)
+        # output = self.dense1(output)
+        # output = self.bn1(output)
+        # output = self.activ1(output)
+        # output = self.dp1(output)
         
-        output = self.dense2(output)
-        output = self.bn2(output)
-        output = self.tanh2(output)
+        # output = self.dense2(output)
+        # output = self.bn2(output)
+        # output = self.activ2(output)
         output = self.dp2(output)
         
         output = self.dense3(output)
@@ -333,24 +355,41 @@ class Noiser(nn.Module):
 
 
 class MLPBranch(nn.Module):
-    def __init__(self, n_class, dropout_rate = 0.0, hidden_activation='relu', output_activation='softmax',
+    def __init__(self, 
+                 dropout_rate = 0.0, 
+                 n_units=128,
+                 hidden_activation='relu',
+                 batch_norm=False,
                  name='MLP',
                  **kwargs):
         super(MLPBranch, self).__init__(**kwargs)
-        self.dense1 = nn.LazyLinear(128)
-        self.relu = nn.ReLU()
+        self.dense1 = nn.LazyLinear(n_units)
+        if hidden_activation == 'relu':
+            self.activ1 = nn.ReLU()
+            self.activ2 = nn.ReLU()
+        elif hidden_activation == 'tanh':
+            self.activ1 = nn.Tanh()
+            self.activ2 = nn.Tanh()
         self.dp1 = nn.Dropout(dropout_rate)
-        self.dense2 = nn.LazyLinear(128)
+        self.batch_norm = batch_norm
+        if batch_norm:
+            self.bn1 = nn.BatchNorm1d(n_units)
+            self.bn2 = nn.BatchNorm1d(n_units)
+        self.dense2 = nn.LazyLinear(n_units)
         self.flatten = nn.Flatten()
 
 
     def forward(self, inputs):
         output = self.flatten(inputs)
         output = self.dense1(output)
-        output = self.relu(output)
+        if self.batch_norm:
+            output = self.bn1(output)
+        output = self.activ1(output)
         output = self.dp1(output)
         output = self.dense2(output)
-        output = self.relu(output)
+        if self.batch_norm:
+            output = self.bn2(output)
+        output = self.activ2(output)
         return output
 
 
