@@ -3,8 +3,8 @@ logs/
 img/
 data/UCRArchive_2018
 data/y_pred*
-model/model_weights___*
-model/noiser_weights___*
+models/model_weights___*
+models/noiser_weights___*
 
 # Extra vscode ignores
 *.code-workspace
