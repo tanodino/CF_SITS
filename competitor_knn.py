@@ -321,6 +321,8 @@ if __name__ == "__main__":
     os.makedirs(LOG_DIR, exist_ok=True)
 
     parser = getBasicParser()
+    parser = cli.addClfLoadArguments(parser)
+    parser = cli.addNoiserLoadArguments(parser)
     parser.set_defaults(noiser_name='noiser_knn')
     parser.add_argument(
         "-k", "--n-neighbors",

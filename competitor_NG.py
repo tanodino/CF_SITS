@@ -36,6 +36,7 @@ import torch
 
 from tslearn.neighbors import KNeighborsTimeSeries, KNeighborsTimeSeriesClassifier
 from tslearn.utils import to_time_series_dataset
+from cfsits_tools import cli
 from cfsits_tools.viz import produceResults
 
 from cfsits_tools.cli import getBasicParser
@@ -529,6 +530,7 @@ if __name__ == "__main__":
     os.makedirs(LOG_DIR, exist_ok=True)
 
     parser = getBasicParser()
+    parser = cli.addClfLoadArguments(parser)
     parser.set_defaults(noiser_name='noiser_NGCAM')
 
     parser.add_argument(
