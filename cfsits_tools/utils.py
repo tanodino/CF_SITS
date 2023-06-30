@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 import time
@@ -22,6 +23,7 @@ from sklearn.metrics import normalized_mutual_info_score
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.metrics import accuracy_score
 from tqdm import tqdm
+from cfsits_tools import log
 
 from cfsits_tools.data import loadAllDataNpy, npyData2DataLoader
 from cfsits_tools.model import S2Classif
@@ -29,6 +31,8 @@ from cfsits_tools.model import S2Classif
 
 
 DEFAULT_MODEL_DIR = "models"
+# log to same logger initialized by the main script calling this module
+logger = logging.getLogger('__main__')
 
 
 def setSeed(seed=0):
@@ -77,14 +81,26 @@ def loadWeights(model, file_path, model_dir=None):
     model_dir = model_dir or DEFAULT_MODEL_DIR
     file_path = os.path.join(model_dir, file_path)
     model.load_state_dict(torch.load(file_path))
-    logging.info(f"Loaded weights from {file_path}")
+    logger.info(f"Loaded weights from {file_path}")
+    return file_path
 
 
 def saveWeights(model, file_path, model_dir=None):
     model_dir = model_dir or DEFAULT_MODEL_DIR
     file_path = os.path.join(model_dir, file_path)
     torch.save(model.state_dict(), file_path)
-    logging.info(f"Weights saved to {file_path}")
+    logger.info(f"Weights saved to {file_path}")
+    return file_path
+
+
+def loadWeightsAndParams(model, file_path, model_dir=None):
+    file_path = loadWeights(model, file_path, model_dir)
+    return log.loadParams(file_path)
+
+
+def saveWeightsAndParams(model, file_path, args, model_dir=None):
+    file_path = saveWeights(model, file_path, model_dir)
+    log.saveParams(file_path, args)
 
 
 def freezeModel(model):
