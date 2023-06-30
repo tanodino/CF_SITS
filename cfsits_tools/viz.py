@@ -19,6 +19,7 @@ from sklearn.utils import shuffle
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 
+
 DATES = pd.to_datetime(
         [20200105, 20200125, 20200209, 20200224, 20200305, 20200325,
             20200404, 20200429, 20200514, 20200524, 20200613, 20200623,
@@ -30,6 +31,9 @@ NAMES = ["Cereals", "Cotton", "Oleaginous", "Grassland",
 NAMES_CHORD = ["CEREALS", "COTTON", "OLEAGINOUS", "GRASSLAND",
         "SHRUBLAND", "FOREST", "B.", "W."]  # "BARE SOIL", "WATER"
 
+
+# log to same logger initialized by the main script calling this module
+logger = logging.getLogger('__main__')
 
 
 def saveFig(i, pred, pred_cf, sample, sampleCF, out_path, x_axis=None):
