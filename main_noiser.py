@@ -1,52 +1,45 @@
 # KOUMBIA
-import logging
-from pathlib import Path
 import numpy as np
 # import tensorflow as tf
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import os
 import sys
 from sklearn.metrics import f1_score
 from sklearn.utils import shuffle
-import time
-from sklearn.manifold import TSNE
-
-from torch.utils.data import TensorDataset, DataLoader
 from sklearn.metrics import confusion_matrix
 
-import time
-import torch.nn.functional as F
 # import matplotlib
 # matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
+
+
 from cfsits_tools import utils
 from cfsits_tools import cli
 from cfsits_tools import log
-
 
 from cfsits_tools.model import Inception, MLPClassif, MLPBranch, Noiser, Discr, S2Classif
 from cfsits_tools.loss import discriminator_loss, generator_loss
 from cfsits_tools.utils import generateOrigAndAdd, ClfPrediction
 from cfsits_tools.data import DEFAULT_DATA_DIR, load_UCR_dataset, loadSplitNpy, npyData2DataLoader
-# torch.save(model.state_dict(), PATH)
 
-# model = TheModelClass(*args, **kwargs)
-# model.load_state_dict(torch.load(PATH))
-# model.eval()
 
 MODEL_DIR = utils.DEFAULT_MODEL_DIR
 DATA_DIR = DEFAULT_DATA_DIR
 
 
-def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, reg_uni, optimizer, optimizerD, loss_bce, n_timestamps, device, path_file, loss_cl_type="log", margin=0.1, do_plots=False):
+def trainModelNoise(
+        model, noiser, discr, 
+        train_dataloader, n_classes, n_timestamps, 
+        optimizer, optimizerD, loss_bce, device, args):
     model.eval()
     noiser.train()
     discr.train()
     # torch.autograd.set_detect_anomaly(True)
     id_temps = np.array(range(n_timestamps))
     id_temps = torch.Tensor(id_temps).to(device)
-    for e in range(n_epochs):
+    for e in range(args.epochs):
         loss_acc = []
         loss_discr = []
         loss_reg_L1 = []
@@ -59,7 +52,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, r
         t_avg_all = []
         non_zeros = []  # just to track sparsity
 
-        for x_batch, y_batch in train:
+        for x_batch, y_batch in train_dataloader:
             noiser.zero_grad()
             discr.zero_grad()
             optimizerD.zero_grad()
@@ -67,7 +60,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, r
 
             x_batch = x_batch.to(device)
             y_batch = y_batch.to(device)
-            to_add = noiser(x_batch)
+            to_add = noiser(x_batch)  # additive perturbation for CF generation
 
             x_cf = x_batch+to_add
             pred_cl = model(x_cf)
@@ -76,13 +69,13 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, r
             y_ohe = F.one_hot(y_batch.long(), num_classes=n_classes)
             prob = torch.sum(prob_cl * y_ohe, dim=1)
 
-            if loss_cl_type == "log":
+            if args.loss_cl_type == "log":
                 loss_classif = torch.mean(-torch.log(1. -
                                           prob + torch.finfo(torch.float32).eps))
             else:  # margin loss
                 max_other = torch.max(prob_cl * (1-y_ohe))
                 loss_classif = torch.mean(-torch.log(1. - torch.maximum(
-                    prob + margin - max_other, torch.tensor(0)) + torch.finfo(torch.float32).eps))
+                    prob + args.margin - max_other, torch.tensor(0)) + torch.finfo(torch.float32).eps))
 
             # Entropy regularizer
             reg_entro = torch.mean(
@@ -157,10 +150,9 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, r
             # magnitude, _ = torch.max( torch.abs( torch.squeeze(x_cf) - torch.squeeze(x_batch) ), dim=1)
             # reg_sim = torch.mean( magnitude )
             # loss+=reg_sim
-            '''
-            loss_d = 0.0
-            
-            '''
+
+            # loss_d = 0.0
+
             # discr.zero_grad()
             real_output = discr(x_batch).view(-1)
             fake_output = discr(x_batch + to_add.detach()).view(-1)
@@ -181,7 +173,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, r
             # loss = 4*loss_classif + .1*uni_reg + .01*reg_L2 + .01*reg_tv + loss_g
 
             # .5*loss_g + .05*uni_reg #+ .05*reg_L2 + .05*reg_tv
-            loss = 1.*loss_classif + reg_gen*loss_g + reg_uni*uni_reg
+            loss = 1.*loss_classif + args.reg_gen*loss_g + args.reg_uni*uni_reg
             loss.backward()
             optimizer.step()
 
@@ -207,7 +199,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, r
         logger.info("epoch %d with Gen loss %f (l_GEN %f l_CL %f and reg_L1 %f and l_TV %f and reg_L2 %f and reg_UNI %f) and Discr Loss %f and L0 %.1f" % (e, np.mean(loss_acc), np.mean(
             loss_generator), np.mean(loss_cl), np.mean(loss_reg_L1), np.mean(loss_reg_tv), np.mean(loss_reg_L2), np.mean(loss_uni), np.mean(loss_discr), np.mean(non_zeros)))
         data, dataCF, pred, pred_cf, orig_label = generateOrigAndAdd(
-            model, noiser, train, device)
+            model, noiser, train_dataloader, device)
         # print("F1 SCORE original model %f"%f1_score(orig_label, pred,average="weighted"))
         # exit()
         '''
@@ -235,7 +227,7 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, r
         ex_cfcl = pred_cf[idx]
 
         # Central time histogram
-        if do_plots:
+        if args.do_plots:
             plt.clf()
             t_avg_all = np.concatenate(t_avg_all, axis=0)
             plt.hist(t_avg_all.squeeze(), bins=np.concatenate(
@@ -251,14 +243,14 @@ def trainModelNoise(model, noiser, discr, train, n_epochs, n_classes, reg_gen, r
             # plt.waitforbuttonpress(0) # this will wait for indefinite time
             # plt.close(fig)
             # exit()
-        utils.saveWeights(noiser, path_file)
+        utils.saveWeights(noiser, args.noiser_name)
 
         sys.stdout.flush()
 
 
 def launchTraining(args):
     # Load data
-    if args.dataset == 'colza':
+    if args.dataset == "koumbia":
         x_train, y_train = loadSplitNpy(
             'train', data_path=DATA_DIR, year=args.year)
         x_valid, y_valid = loadSplitNpy(
@@ -280,6 +272,10 @@ def launchTraining(args):
     elif args.model_arch == 'MLP':
         model = MLPClassif(n_classes, dropout_rate=args.dropout_rate)
 
+    # Load and freeze classification model
+    utils.loadWeights(model, args.model_name)
+    utils.freezeModel(model)
+
     # noiser model
     noiser = Noiser(
         out_dim=n_timestamps,
@@ -297,10 +293,6 @@ def launchTraining(args):
     noiser.to(device)
     discr.to(device)
 
-    # Load and freeze classification model
-    utils.loadWeights(model, args.model_name)
-    utils.freezeModel(model)
-
     # compute y_pred
     y_pred_train = ClfPrediction(
         model, npyData2DataLoader(x_train, batch_size=2048), device)
@@ -315,6 +307,7 @@ def launchTraining(args):
     valid_dataloader = npyData2DataLoader(
         x_valid, y_pred_valid,  shuffle=False, batch_size=64)
 
+    # optimizer setup
     optimizer = torch.optim.Adam(
         noiser.parameters(),
         lr=args.learning_rate,  # see default value at cli.py
@@ -326,32 +319,40 @@ def launchTraining(args):
         weight_decay=args.weight_decay  # default value at cli.py
     )
 
-    # loss_ce = nn.CrossEntropyLoss().to(device)
+    # Setup binary cross entropy loss (for the discriminator)
     loss_bce = nn.BCELoss().to(device)
 
     trainModelNoise(
-        model, noiser, discr, train_dataloader, args.epochs, n_classes, args.reg_gen, args.reg_uni,
-        optimizer, optimizerD, loss_bce, n_timestamps, device, args.noiser_name, args.loss_cl_type, args.margin, args.do_plots)
+        model, noiser, discr, train_dataloader, 
+        n_classes, n_timestamps,
+        optimizer, optimizerD, loss_bce, 
+        device, args)
 
 
 if __name__ == "__main__":
     parser = cli.getBasicParser()
     parser = cli.addNoiserArguments(parser)
+    parser = cli.addClfModelArguments(parser)
     parser = cli.addTrainingArguments(parser)
     parser.set_defaults(epochs=100)
-    parser.add_argument(
-        '--img-path',
-        default=log.getLogdir(__file__),
-        help='Directory in which plots and figures are saved'
-    )
+    # Args to activating some monitoring plots during training
     parser.add_argument(
         '--do-plots',
         action='store_true',
         default=False,
-        help='Runs plotting functions and writes results to IMG_PATH'
+        help='Runs plotting functions and writes results to IMG_PATH.'
+    )
+    parser.add_argument(
+        '--img-path',
+        default=os.path.join(log.getLogdir(__file__, parser),'img'),
+        help='Directory in which plots and figures are saved.'
     )
 
     args = parser.parse_args()
+    # Create img dir if needed
+    if args.do_plots:
+        os.makedirs(args.img_path, exist_ok=True)
+
     # logging set up
     logger = log.setupLogger(__file__, parser)
 
@@ -361,4 +362,4 @@ if __name__ == "__main__":
     launchTraining(args)
 
     path_file_noiser = os.path.join(MODEL_DIR, args.noiser_name)
-    log.saveCopyWithParams(path_file_noiser)
+    log.saveCopyWithParams(path_file_noiser, parser)

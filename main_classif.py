@@ -45,7 +45,7 @@ def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, dev
 
 def launchTraining(args):
     # Load data
-    if args.dataset == 'colza':
+    if args.dataset == "koumbia":
         x_train, y_train = loadSplitNpy(
             'train', data_path=DATA_DIR, year=args.year)
         x_valid, y_valid = loadSplitNpy(

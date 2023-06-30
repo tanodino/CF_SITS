@@ -168,7 +168,8 @@ class Inception(nn.Module):
 
 
 class S2Branch(nn.Module):
-    def __init__(self, n_class, dropout_rate = 0.0, hidden_activation='relu', output_activation='softmax',
+    def __init__(self, dropout_rate = 0.0, hidden_activation='relu',
+                 output_activation='softmax',
                  name='S2Branch',
                  **kwargs):
         super(S2Branch, self).__init__(**kwargs)

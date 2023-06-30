@@ -21,31 +21,26 @@ def getScriptName(filename):
     return os.path.basename(os.path.splitext(filename)[0])
 
 
-def getLogdir(filename):
+def getLogdir(filename, parser):
+    args = parser.parse_args()
     script_name = getScriptName(filename)
-    log_dir = os.path.join('logs', script_name)
+    subdir = getSuffixWithParameters(parser) + getParamHashSuffix(args)
+    log_dir = os.path.join('logs', script_name, subdir)
     os.makedirs(log_dir, exist_ok=True)
     return log_dir
 
 
 def setupLogger(filename, parser):
-    logger_name = getScriptName(filename)
-    log_dir = getLogdir(filename)
-    logger = logging.getLogger(logger_name)
+    script_name = getScriptName(filename)
+    log_dir = getLogdir(filename, parser)
+    logger = logging.getLogger('__main__')
     # parse args
     args = parser.parse_args()
 
     log_filepath = os.path.join(log_dir, args.logfile)
-    # prepare name of the copy including non default params as a suffix
-    param_copy_fpath, ext = includeParamSuffix(log_filepath, parser)
-    # add unique hash to fname
-    param_copy_fpath = includeParamHashSuffix(param_copy_fpath, args)
-    # add extension
-    param_copy_fpath += ext
 
     handlers = [
         logging.FileHandler(log_filepath, mode="w"),
-        logging.FileHandler(param_copy_fpath, mode="w"),
         logging.StreamHandler(sys.stdout)
     ]
     for h in handlers:
@@ -60,8 +55,8 @@ def setupLogger(filename, parser):
     logger.setLevel(args.log_level)
     
     now = strftime("%a, %d %b %Y %H:%M:%S +0000 (GMT)", gmtime())
-    logger.info(f'Running {logger_name} @ {now}')
-    logger.info(f'Parameters: {vars(args)}')
+    logger.info(f'Running {script_name} @ {now}')
+    logger.info(f'Parameters: {json.dumps(vars(args), sort_keys=True)}')
     return logger
 
 
@@ -83,7 +78,7 @@ def getSuffixWithParameters(parser):
     param_list.sort()
     # if all params are default, param list is empty
     # add default as the suffix
-    suffix = '___' + ('__'.join(param_list) or 'default')
+    suffix =  ('__'.join(param_list) or 'default')
     return suffix
 
 
@@ -91,19 +86,23 @@ def includeParamSuffix(file_path, parser):
     # get current root name and extension of the given file_path
     root, ext = os.path.splitext(file_path)
     # prepare name of the copy including non default params as a suffix
-    copy_path = root + getSuffixWithParameters(parser)
+    copy_path = root + '___' +getSuffixWithParameters(parser)
 
     return copy_path, ext
 
 
-def includeParamHashSuffix(copy_path, args):
+def getParamHashSuffix(args):
     # serialized version of args
     json_args = json.dumps(vars(args), sort_keys=True)
     # take first 7 hex figures of md5 hash as signature
     param_hash = hashlib.md5(
         json_args.encode('utf-8'), usedforsecurity=False
     ).hexdigest()[:7]
-    copy_path += f'__md5_{param_hash}'
+    suffix = f'__md5_{param_hash}'
+    return suffix
+
+def includeParamHashSuffix(copy_path, args):
+    copy_path += getParamHashSuffix(args)
     return copy_path
 
 def saveCopyWithParams(file_path, parser):

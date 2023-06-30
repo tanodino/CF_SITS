@@ -9,8 +9,8 @@ def getBasicParser():
         formatter_class=ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         "--dataset",
-        default='colza',
-        choices=['colza']+list_UCR_datasets()
+        default="koumbia",
+        choices=["koumbia"]+list_UCR_datasets()
     )
     parser.add_argument(
         "-y","--year",
@@ -57,18 +57,22 @@ def addTrainingArguments(parser):
     train_args = parser.add_argument_group('Training args')
     train_args.add_argument(
         "--learning-rate",
-        default=1e-4
+        type=float,
+        default=1e-4,
     )
     train_args.add_argument(
         "--weight-decay",
-        default=1e-4
+        type=float,
+        default=1e-4,
     )
     train_args.add_argument(
         "--epochs",
-        default=1000
+        type=int,
+        default=1000,
     )
     train_args.add_argument(
         "--batch-size",
+        type=int,
         default=128,
         help="Batch size used for training."
     )
@@ -78,6 +82,7 @@ def addClfModelArguments(parser):
     model_args = parser.add_argument_group('Classification model args')
     model_args.add_argument(
         "--dropout-rate",
+        type=float,
         default=0.5,
         help="Dropout rate of the classification model."
     )
@@ -110,11 +115,13 @@ def addNoiserArguments(parser):
     )
     noiser_args.add_argument(
         '--reg-gen',
+        type=float,
         default=0.5,
         help='Weight of the GAN generator loss.'
     )
     noiser_args.add_argument(
         '--reg-uni',
+        type=float,
         default=0.05,
         help='Weight of the unimodal L1 regularization loss.'
     )
@@ -126,16 +133,19 @@ def addNoiserArguments(parser):
     )
     noiser_args.add_argument(
         '--margin',
+        type=float,
         default=0.1,
         help='Margin term, used only if --loss-cl-type=margin is passed.'
     )
     noiser_args.add_argument(
         "--dropout-noiser",
+        type=float,
         default=0.3,
         help="Dropout rate of the noiser (generator) model."
     )
     noiser_args.add_argument(
         "--dropout-discr",
+        type=float,
         default=0.2,
         help="Dropout rate of the discriminator model."
     )
