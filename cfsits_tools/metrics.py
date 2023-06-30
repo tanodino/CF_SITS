@@ -27,6 +27,10 @@ from cfsits_tools.utils import ClfPrediction
 from cfsits_tools.viz import printConfMatrix
 
 
+# log to same logger initialized by the main script calling this module
+logger = logging.getLogger('__main__')
+
+
 def validity(X, Xcf, model):
     y_pred = []
     for data in [X, Xcf]:
@@ -50,9 +54,10 @@ def relative_proximity(X, Xcf, y_cf_pred, nnX, nny, order=2):
     # Xnun = nearest neighbor with class != ypred
     Xnun = np.zeros_like(X)
     for dst in classes:
-        nn = NearestNeighbors().fit(nnX[nny == dst])
+        nnX_unlike = nnX[nny != dst]
+        nn = NearestNeighbors().fit(nnX_unlike)
         nn_idx = nn.kneighbors(X[y_cf_pred==dst], n_neighbors=1, return_distance=False).squeeze()
-        Xnun[y_cf_pred==dst] = nnX[nny != dst][nn_idx]
+        Xnun[y_cf_pred==dst] = nnX_unlike[nn_idx]
     den = np.linalg.norm(X-Xnun, axis=1, ord=order)
     return num/den
 
@@ -84,22 +89,22 @@ def plausibility_ratios(X, outlier_estimator):
 
 
 def printOtherIFmetrics(X, Xcf, outlier_estimator):
-    logging.info("ISOLATION FOREST RESULTS:")
+    logger.info("ISOLATION FOREST RESULTS:")
     pred_orig = _to_0_1(outlier_estimator.predict(X))
     pred_cf = _to_0_1(outlier_estimator.predict(Xcf))
-    logging.info(f'Real data [outliers, inliers]: {np.bincount(pred_orig)}')
-    logging.info(f'CF data   [outliers, inliers]: {np.bincount(pred_cf)}')
+    logger.info(f'Real data [outliers, inliers]: {np.bincount(pred_orig)}')
+    logger.info(f'CF data   [outliers, inliers]: {np.bincount(pred_cf)}')
 
     # Metrics
     inlier_recall = recall_score(pred_orig, pred_cf)
     outlier_precision = precision_score(pred_orig, pred_cf)
-    logging.info(f"Inlier recall: {inlier_recall}")
-    logging.info(f"Outlier precision: {outlier_precision}")
-    logging.info("NMI score: %f" %
+    logger.info(f"Inlier recall: {inlier_recall}")
+    logger.info(f"Outlier precision: {outlier_precision}")
+    logger.info("NMI score: %f" %
                  (normalized_mutual_info_score(pred_orig, pred_cf)))
-    logging.info("Agreement in/outlier btw real and cf data (accuracy): %f" %
+    logger.info("Agreement in/outlier btw real and cf data (accuracy): %f" %
                  (accuracy_score(pred_orig, pred_cf)))
-    logging.info(
+    logger.info(
         "Confusion matrix: (isolation forest prediction on original data vs. IF prediction on CF)")
     cm = confusion_matrix(pred_orig, pred_cf)
     printConfMatrix(cm)
@@ -175,38 +180,38 @@ def metricsReport(X, Xcf, y_pred=None, y_pred_cf=None, ifX=None,
     # Proximity
     for order in [1, 2, np.inf]:
         proximity_avg = np.mean(proximity(X, Xcf, order=order))
-        logging.info(f"avg proximity @ norm-{order}: {proximity_avg:0.4f}")
+        logger.info(f"avg proximity @ norm-{order}: {proximity_avg:0.4f}")
 
     # Relative proximity
     for order in [1, 2, np.inf]:
         rel_prox_avg = np.mean(
             relative_proximity(X, Xcf, y_pred_cf, X_train, y_pred_train, order=order))
-        logging.info(f"avg rel proximity @ norm-{order}: {rel_prox_avg:0.4f}")
+        logger.info(f"avg rel proximity @ norm-{order}: {rel_prox_avg:0.4f}")
 
     # Plausibility
     outlier_estimator = IsolationForest(n_estimators=300).fit(ifX)
     plausibility_avg = np.mean(plausibility(
         X, Xcf, estimator=outlier_estimator))
-    logging.info(f"avg plausibility: {plausibility_avg:0.4f}")
+    logger.info(f"avg plausibility: {plausibility_avg:0.4f}")
 
     # Validity
     if model is None and y_pred is not None:
         validity_avg = np.mean(validity_from_pred(y_pred, y_pred_cf))
-        logging.info(f"avg validity: {validity_avg:0.4f}")
+        logger.info(f"avg validity: {validity_avg:0.4f}")
     elif model is not None:
         validity_avg = np.mean(validity(X, Xcf, model))
-        logging.info(f"avg validity: {validity_avg:0.4f}")
+        logger.info(f"avg validity: {validity_avg:0.4f}")
 
     # Compactness
     for threshold in [1e-2, 1e-4, 1e-8]: #  1e-3, 1e-4, 1e-8
         compactness_avg = np.mean(compactness(
             X, Xcf, threshold=threshold))
-        logging.info(f"avg compactness @ threshold={threshold:0.1e}: {compactness_avg:0.4f}")
+        logger.info(f"avg compactness @ threshold={threshold:0.1e}: {compactness_avg:0.4f}")
 
 
     # Stability
     if (X_train is None or Xcf_train is None):
-        logging.warning('Counterfactual examples for trainint data are required to compute stability metric, but were missing. Skipping computation')
+        logger.warning('Counterfactual examples for trainint data are required to compute stability metric, but were missing. Skipping computation')
 
     elif Xcf_target_class is not None:
         result = np.NaN * np.ones((X.shape[0]))
@@ -223,4 +228,4 @@ def metricsReport(X, Xcf, y_pred=None, y_pred_cf=None, ifX=None,
     else:
         stability_avg = np.mean(
             stability(X=X, Xcf=Xcf, k=k, nnX=X_train, nnXcf=Xcf_train))
-    logging.info(f"avg stability: {stability_avg:0.4f}")
+    logger.info(f"avg stability: {stability_avg:0.4f}")
