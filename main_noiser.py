@@ -1,4 +1,6 @@
 # KOUMBIA
+import logging
+from pathlib import Path
 import numpy as np
 # import tensorflow as tf
 import torch
@@ -15,7 +17,7 @@ from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 
 
-from cfsits_tools import utils
+from cfsits_tools import metrics, utils, viz
 from cfsits_tools import cli
 from cfsits_tools import log
 
@@ -29,9 +31,95 @@ MODEL_DIR = utils.DEFAULT_MODEL_DIR
 DATA_DIR = DEFAULT_DATA_DIR
 
 
+def launchTraining(args):
+    # Load data
+    if args.dataset == "koumbia":
+        x_train, y_train = loadSplitNpy(
+            'train', data_path=DATA_DIR, year=args.year, squeeze=True)
+        x_valid, y_valid = loadSplitNpy(
+            'valid', data_path=DATA_DIR, year=args.year, squeeze=True)
+    else:  # load UCR dataset
+        x_train, y_train = load_UCR_dataset(args.dataset, split='train')
+        x_valid, y_valid = load_UCR_dataset(args.dataset, split='valid')
+
+    n_classes = len(np.unique(y_train))
+    logger.info(f'x_train shape: {x_train.shape}')
+
+    n_timestamps = x_train.shape[-1]
+
+    # Classification model
+    if args.model_arch == 'TempCNN':
+        model = S2Classif(n_classes)
+    elif args.model_arch == 'Inception':
+        model = Inception(n_classes)
+    elif args.model_arch == 'MLP':
+        model = MLPClassif(n_classes)
+
+    # Load and freeze classification model
+    logger.info('Loading classifier')
+    model_params = utils.loadWeightsAndParams(model, args.model_name)
+    logger.info(f'Classifier params: {model_params}')
+    utils.freezeModel(model)
+
+    # noiser model
+    noiser = Noiser(
+        out_dim=n_timestamps,
+        dropout_rate=args.dropout_noiser,
+        shrink=args.shrink,
+        base_arch=args.noiser_arch)
+
+    # Discriminator model
+    discr = Discr(args.dropout_discr, encoder=args.discr_arch)
+
+    # device setup
+    utils.setFreeDevice()
+    device = utils.getCurrentDevice()
+    model.to(device)
+    noiser.to(device)
+    discr.to(device)
+
+
+    # compute y_pred
+    y_pred_train = ClfPrediction(
+        model, npyData2DataLoader(x_train, batch_size=2048), device)
+    y_pred_train = torch.Tensor(y_pred_train)
+    y_pred_valid = ClfPrediction(
+        model, npyData2DataLoader(x_valid, batch_size=2048), device)
+    y_pred_valid = torch.Tensor(y_pred_valid)
+
+    # Prepare dataloaders for training
+    train_dataloader = npyData2DataLoader(
+        x_train, y_pred_train,  shuffle=True, batch_size=args.batch_size)
+    valid_dataloader = npyData2DataLoader(
+        x_valid, y_pred_valid,  shuffle=False, batch_size=64)
+
+    # optimizer setup
+    optimizer = torch.optim.Adam(
+        noiser.parameters(),
+        lr=args.learning_rate,  # see default value at cli.py
+        weight_decay=args.weight_decay  # default value at cli.py
+    )
+    optimizerD = torch.optim.Adam(
+        discr.parameters(),
+        lr=args.learning_rate,  # see default value at cli.py
+        weight_decay=args.weight_decay  # default value at cli.py
+    )
+
+    # Setup binary cross entropy loss (for the discriminator)
+    loss_bce = nn.BCELoss().to(device)
+
+    trainModelNoise(
+        model, noiser, discr,
+        train_dataloader, valid_dataloader,
+        n_classes, n_timestamps,
+        optimizer, optimizerD, loss_bce,
+        device, args)
+
+
 def trainModelNoise(
-        model, noiser, discr, 
-        train_dataloader, n_classes, n_timestamps, 
+        model, noiser, discr,
+        train_dataloader, valid_dataloader,
+        n_classes, n_timestamps,
         optimizer, optimizerD, loss_bce, device, args):
     model.eval()
     noiser.train()
@@ -232,126 +320,38 @@ def trainModelNoise(
             t_avg_all = np.concatenate(t_avg_all, axis=0)
             plt.hist(t_avg_all.squeeze(), bins=np.concatenate(
                 ([-.5], np.arange(n_timestamps))))
-            plt.savefig(os.path.join(args.img_path,
+            plt.savefig(os.path.join(IMG_DIR,
                         "epoch_%d_t_avg_hist.jpg" % (e)))
 
             plt.clf()
             plt.plot(np.arange(len(sample)), sample, 'b')
             plt.plot(np.arange(len(sampleCF)), sampleCF, 'r')
             plt.savefig(os.path.join(
-                args.img_path, "epoch_%d_from_cl_%d_2cl_%d.jpg" % (e, ex_cl, ex_cfcl)))
+                IMG_DIR, "epoch_%d_from_cl_%d_2cl_%d.jpg" % (e, ex_cl, ex_cfcl)))
             # plt.waitforbuttonpress(0) # this will wait for indefinite time
             # plt.close(fig)
             # exit()
-        utils.saveWeights(noiser, args.noiser_name)
+        utils.saveWeightsAndParams(noiser, args.noiser_name, args)
 
         sys.stdout.flush()
 
 
-def launchTraining(args):
-    # Load data
-    if args.dataset == "koumbia":
-        x_train, y_train = loadSplitNpy(
-            'train', data_path=DATA_DIR, year=args.year)
-        x_valid, y_valid = loadSplitNpy(
-            'valid', data_path=DATA_DIR, year=args.year)
-    else:  # load UCR dataset
-        x_train, y_train = load_UCR_dataset(args.dataset, split='train')
-        x_valid, y_valid = load_UCR_dataset(args.dataset, split='valid')
-
-    n_classes = len(np.unique(y_train))
-    logger.info(f'x_train shape: {x_train.shape}')
-
-    n_timestamps = x_train.shape[-1]
-
-    # Classification model
-    if args.model_arch == 'TempCNN':
-        model = S2Classif(n_classes, dropout_rate=args.dropout_rate)
-    elif args.model_arch == 'Inception':
-        model = Inception(n_classes)
-    elif args.model_arch == 'MLP':
-        model = MLPClassif(n_classes, dropout_rate=args.dropout_rate)
-
-    # Load and freeze classification model
-    utils.loadWeights(model, args.model_name)
-    utils.freezeModel(model)
-
-    # noiser model
-    noiser = Noiser(
-        out_dim=n_timestamps,
-        dropout_rate=args.dropout_noiser,
-        shrink=args.shrink,
-        base_arch=args.noiser_arch)
-
-    # Discriminator model
-    discr = Discr(args.dropout_discr, encoder=args.discr_arch)
-
-    # device setup
-    utils.setFreeDevice()
-    device = utils.getCurrentDevice()
-    model.to(device)
-    noiser.to(device)
-    discr.to(device)
-
-    # compute y_pred
-    y_pred_train = ClfPrediction(
-        model, npyData2DataLoader(x_train, batch_size=2048), device)
-    y_pred_train = torch.Tensor(y_pred_train)
-    y_pred_valid = ClfPrediction(
-        model, npyData2DataLoader(x_valid, batch_size=2048), device)
-    y_pred_valid = torch.Tensor(y_pred_valid)
-
-    # Prepare dataloaders for training
-    train_dataloader = npyData2DataLoader(
-        x_train, y_pred_train,  shuffle=True, batch_size=args.batch_size)
-    valid_dataloader = npyData2DataLoader(
-        x_valid, y_pred_valid,  shuffle=False, batch_size=64)
-
-    # optimizer setup
-    optimizer = torch.optim.Adam(
-        noiser.parameters(),
-        lr=args.learning_rate,  # see default value at cli.py
-        weight_decay=args.weight_decay  # default value at cli.py
-    )
-    optimizerD = torch.optim.Adam(
-        discr.parameters(),
-        lr=args.learning_rate,  # see default value at cli.py
-        weight_decay=args.weight_decay  # default value at cli.py
-    )
-
-    # Setup binary cross entropy loss (for the discriminator)
-    loss_bce = nn.BCELoss().to(device)
-
-    trainModelNoise(
-        model, noiser, discr, train_dataloader, 
-        n_classes, n_timestamps,
-        optimizer, optimizerD, loss_bce, 
-        device, args)
-
-
 if __name__ == "__main__":
     parser = cli.getBasicParser()
-    parser = cli.addNoiserArguments(parser)
-    parser = cli.addClfModelArguments(parser)
-    parser = cli.addTrainingArguments(parser)
+    parser = cli.addClfLoadArguments(parser)
+    parser = cli.addNoiserLoadArguments(parser)
+    parser = cli.addNoiserTrainArguments(parser)
+    parser = cli.addOptimArguments(parser)
     parser.set_defaults(epochs=100)
-    # Args to activating some monitoring plots during training
+
     parser.add_argument(
         '--do-plots',
         action='store_true',
         default=False,
-        help='Runs plotting functions and writes results to IMG_PATH.'
-    )
-    parser.add_argument(
-        '--img-path',
-        default=os.path.join(log.getLogdir(__file__, parser),'img'),
-        help='Directory in which plots and figures are saved.'
+        help='Runs plotting functions and writes results to logdir.'
     )
 
     args = parser.parse_args()
-    # Create img dir if needed
-    if args.do_plots:
-        os.makedirs(args.img_path, exist_ok=True)
 
     # logging set up
     logger = log.setupLogger(__file__, parser)
@@ -359,7 +359,15 @@ if __name__ == "__main__":
     logger.info(f"Setting manual seed={args.seed} for reproducibility")
     utils.setSeed(args.seed)
 
-    launchTraining(args)
+    # Create img dir within log dir if needed
+    IMG_PATH = os.path.join(log.getLogdir(), 'img')
+    if args.do_plots:
+        os.makedirs(IMG_PATH, exist_ok=True)
 
+
+    launchTraining(args)
     path_file_noiser = os.path.join(MODEL_DIR, args.noiser_name)
     log.saveCopyWithParams(path_file_noiser, parser)
+    log.copy2Logdir(path_file_noiser)
+
+
