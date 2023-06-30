@@ -1,6 +1,6 @@
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
-from cfsits_tools.data import list_UCR_datasets
+from cfsits_tools.data import VALID_SPLITS, list_UCR_datasets
 from cfsits_tools.log import numericLogLevel
 
 
@@ -10,24 +10,15 @@ def getBasicParser():
     parser.add_argument(
         "--dataset",
         default="koumbia",
-        choices=["koumbia"]+list_UCR_datasets()
+        choices=["koumbia"] + list_UCR_datasets()
     )
     parser.add_argument(
         "-y","--year",
         default=2020,
         type=int,
-        help='Year of the colza data. Only 2020 available now. Only used when dataset=colza.'
+        help='Year of the colza data. Only 2020 available now. Only used when dataset=koumbia.'
     )
-    parser.add_argument(
-        "--model-name",
-        default="model_weights",
-        help='Name of the file containing classifier model weights'
-    )
-    parser.add_argument(
-        "--noiser-name",
-        default="noiser_weights",
-        help='Name of the file containing noiser model weights'
-    )
+
     parser.add_argument(
         "--seed",
         default=0,
@@ -39,11 +30,7 @@ def getBasicParser():
         default=numericLogLevel('info'),
         help='Set logging level for script (debug, info, warning, error). '
     )
-    parser.add_argument(
-        '--logfile',
-        default='log.txt',
-        help='Choose logging file name.'
-    )
+
     parser.add_argument(
         '--dry-run',
         action='store_true',
@@ -53,8 +40,41 @@ def getBasicParser():
     return parser
 
 
-def addTrainingArguments(parser):
-    train_args = parser.add_argument_group('Training args')
+def addClfLoadArguments(parser):
+    parser.add_argument(
+        "--model-name",
+        default="model_weights",
+        help='Name of the file containing classifier model weights.'
+    )
+    parser.add_argument(
+        "--model-arch",
+        default='TempCNN',
+        help='Classification model architecture.'
+    )
+    return parser
+
+
+def addNoiserLoadArguments(parser):
+    parser.add_argument(
+        "--noiser-name",
+        default="noiser_weights",
+        help='Name of the file containing noiser model weights.'
+    )
+    parser.add_argument(
+        '--noiser-arch',
+        default='MLP',
+        help='Noiser (generator) model architecture.'
+    )
+    parser.add_argument(
+        '--shrink',
+        action='store_true',
+        default=False,
+        help='Uses softshrink in the noiser model.'
+    )
+    return parser
+
+def addOptimArguments(parser):
+    train_args = parser.add_argument_group('Optimization args')
     train_args.add_argument(
         "--learning-rate",
         type=float,
@@ -78,40 +98,23 @@ def addTrainingArguments(parser):
     )
     return parser
 
-def addClfModelArguments(parser):
-    model_args = parser.add_argument_group('Classification model args')
+def addClfTrainArguments(parser):
+    model_args = parser.add_argument_group('Classification model training args')
     model_args.add_argument(
         "--dropout-rate",
         type=float,
         default=0.5,
         help="Dropout rate of the classification model."
     )
-    model_args.add_argument(
-        "--model-arch",
-        default='TempCNN',
-        help='Classification model architecture.'
-    )
     return parser
 
 
-
-def addNoiserArguments(parser):
+def addNoiserTrainArguments(parser):
     noiser_args = parser.add_argument_group('Noiser training args')
     noiser_args.add_argument(
         "--discr-arch",
         default='TempCNN',
         help='Discriminator model architecture.'
-    )
-    noiser_args.add_argument(
-        '--noiser-arch',
-        default='MLP',
-        help='Noiser (generator) model architecture.'
-    )
-    noiser_args.add_argument(
-        '--shrink',
-        action='store_true',
-        default=False,
-        help='When training, uses softshrink in the noiser model. On inference, uses a noiser model trained with softshrink.'
     )
     noiser_args.add_argument(
         '--reg-gen',
@@ -152,5 +155,13 @@ def addNoiserArguments(parser):
     return parser
 
 
-
+def addInferenceParams(parser):
+    group = parser.add_argument_group('Inference params')
+    group.add_argument(
+        '--split',
+        choices=VALID_SPLITS,
+        default='test',
+        help='Data partition used to compute results.'
+    )
+    return parser
 
