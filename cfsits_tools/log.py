@@ -6,6 +6,9 @@ from pathlib import Path
 from shutil import copy2
 import sys
 
+logger = logging.getLogger('__main__')
+
+IGNORE_ARGS = ['do_plots']
 
 def numericLogLevel(loglevel:str):
     # assuming loglevel is bound to the string value obtained from the
@@ -21,7 +24,7 @@ def getScriptName(filename):
     return os.path.basename(os.path.splitext(filename)[0])
 
 
-def getLogdir(filename, parser):
+def createLogdir(filename, parser):
     args = parser.parse_args()
     script_name = getScriptName(filename)
     subdir = getSuffixWithParameters(parser) + getParamHashSuffix(args)
@@ -32,12 +35,14 @@ def getLogdir(filename, parser):
 
 def setupLogger(filename, parser):
     script_name = getScriptName(filename)
-    log_dir = getLogdir(filename, parser)
+    log_dir = createLogdir(filename, parser)
     logger = logging.getLogger('__main__')
     # parse args
     args = parser.parse_args()
 
-    log_filepath = os.path.join(log_dir, args.logfile)
+    fname = 'log.txt'
+
+    log_filepath = os.path.join(log_dir, fname)
 
     handlers = [
         logging.FileHandler(log_filepath, mode="w"),
@@ -51,20 +56,37 @@ def setupLogger(filename, parser):
         ))
         logger.addHandler(h)
         from time import gmtime, strftime
-    
+
     logger.setLevel(args.log_level)
-    
+
     now = strftime("%a, %d %b %Y %H:%M:%S +0000 (GMT)", gmtime())
     logger.info(f'Running {script_name} @ {now}')
     logger.info(f'Parameters: {json.dumps(vars(args), sort_keys=True)}')
     return logger
 
+def getLogdir():
+    log_dir, log_file = os.path.split(logger.handlers[0].baseFilename)
+    return log_dir
+
+
+def _removeIgnoreArgs(args) -> dict:
+    args_d = vars(args)
+    # Remove args to ignore
+    for key in IGNORE_ARGS:
+        if key in args_d:
+            del args_d[key]
+    return args_d
+
 
 def getNonDefaultArgs(parser) -> dict:
     args = parser.parse_args()
-    args_d = vars(args)
+    args_d = _removeIgnoreArgs(args)
     # Adapted from https://stackoverflow.com/questions/44542605/python-how-to-get-all-default-values-from-argparse
     # To get all defaults:
+    # XXX DO NOT USE SUBPARSERS WITH THIS
+    # subparsers mess up with the internal parser dict containing defaults
+    # it becomes empty so we can't retrieve default values anymore
+    # see https://stackoverflow.com/q/43688450
     all_defaults = {key: parser.get_default(key) for key in args_d}
     # Get non default by comparing with all_defaults
     non_default_args = dict(filter(
@@ -78,7 +100,10 @@ def getSuffixWithParameters(parser):
     param_list.sort()
     # if all params are default, param list is empty
     # add default as the suffix
-    suffix =  ('__'.join(param_list) or 'default')
+    # truncate so that filenames do not get too big
+    # unix has a filename limit of 255 utf-8 chars
+    suffix =  ('__'.join(param_list) or 'default')[:200]
+
     return suffix
 
 
@@ -92,8 +117,9 @@ def includeParamSuffix(file_path, parser):
 
 
 def getParamHashSuffix(args):
+    args_d = _removeIgnoreArgs(args)
     # serialized version of args
-    json_args = json.dumps(vars(args), sort_keys=True)
+    json_args = json.dumps(args_d, sort_keys=True)
     # take first 7 hex figures of md5 hash as signature
     param_hash = hashlib.md5(
         json_args.encode('utf-8'), usedforsecurity=False
@@ -101,23 +127,51 @@ def getParamHashSuffix(args):
     suffix = f'__md5_{param_hash}'
     return suffix
 
+
 def includeParamHashSuffix(copy_path, args):
     copy_path += getParamHashSuffix(args)
     return copy_path
 
-def saveCopyWithParams(file_path, parser):
-    args = parser.parse_args()
 
-    # prepare name of the copy including non default params as a suffix
-    copy_path, ext = includeParamSuffix(file_path, parser)
-    # add unique hash to fname
-    copy_path = includeParamHashSuffix(copy_path, args)
-    # save complete set of params to a json file with same basename + .params.json extension
-    all_params_file = copy_path + '.params.json'
-
-    # now that file paths are set
-    # save copy and params file
-    copy2(file_path, copy_path+ext)
+def saveParams(basefile, args):
+    """Save complete set of params to a json file with same basename + .params.json extension"""
+    logger = logging.getLogger('__main__')
+    all_params_file = basefile + '.params.json'
     with open(all_params_file, 'w') as fp:
         json.dump(vars(args), fp, sort_keys=True)
+    logger.info(f'Full param set of {basefile} saved at {all_params_file}')
 
+def loadParams(basefile):
+    logger = logging.getLogger('__main__')
+    all_params_file = basefile + '.params.json'
+    logger.info(f'Loading full param set of {basefile} from {all_params_file}')
+    with open(all_params_file) as fp:
+        args_d = json.load(fp)
+    return args_d
+
+def saveCopyWithParams(file_path, parser):
+    args = parser.parse_args()
+    # prepare name of the copy including non default params as a suffix
+   # get current root name and extension of the given file_path
+    root, ext = os.path.splitext(file_path)
+    # prepare name of the copy including non default params as a suffix
+    copy_path = root + '___' +getSuffixWithParameters(parser)
+
+    # add unique hash to fname
+    copy_path += getParamHashSuffix(args) + ext
+
+    # now that file path is set
+    # save copy and params file
+    copy2(file_path, copy_path)
+    logger.info(f'Saved copy of {file_path} at {copy_path}')
+    saveParams(copy_path, args)
+
+
+def copy2Logdir(file_path):
+    log_dir = getLogdir()
+    copy2(file_path, log_dir)
+    logger.info(f'Saved copy of {file_path} at {log_dir}')
+    param_file = file_path + '.params.json'
+    if os.path.exists(param_file):
+        copy2(param_file, log_dir)
+        logger.info(f'Saved copy of {param_file} at {log_dir}')
