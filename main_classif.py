@@ -6,6 +6,7 @@ import os
 import sys
 
 from cfsits_tools import utils, cli
+from cfsits_tools import log
 from cfsits_tools.log import saveCopyWithParams, setupLogger
 from cfsits_tools.model import Inception, S2Classif, MLPClassif
 from cfsits_tools.data import DEFAULT_DATA_DIR, load_UCR_dataset, loadSplitNpy, extractNDVI, npyData2DataLoader
@@ -16,11 +17,10 @@ MODEL_DIR = utils.DEFAULT_MODEL_DIR
 DATA_DIR = DEFAULT_DATA_DIR
 
 
-def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, device=None):
-    device = device or utils.getCurrentDevice()
+def trainModel(model, train, valid, loss_ce, optimizer, device, args):
     model.train()
     best_validation = 0
-    for e in range(n_epochs):
+    for e in range(args.epochs):
         loss_acc = []
         for x_batch, y_batch in train:
             model.zero_grad()
@@ -37,7 +37,7 @@ def trainModel(model, train, valid, n_epochs, loss_ce, optimizer, path_file, dev
         logger.info("\t val on VALIDATION %f" % score_valid)
         if score_valid > best_validation:
             best_validation = score_valid
-            utils.saveWeights(model, path_file)
+            utils.saveWeightsAndParams(model, args.model_name, args)
             logger.info("\t\t BEST VALID %f" % score_valid)
 
         sys.stdout.flush()
@@ -81,25 +81,26 @@ def launchTraining(args):
 
     optimizer = torch.optim.Adam(
         model.parameters(),
-        lr=args.learning_rate,  # see default value at cli.py
-        weight_decay=args.weight_decay  # default value at cli.py
+        lr=args.learning_rate,
+        weight_decay=args.weight_decay
     )
 
     loss_ce = nn.CrossEntropyLoss().to(device)
 
     trainModel(model, train_dataloader, valid_dataloader,
-               args.epochs, loss_ce, optimizer, args.model_name, device)
+               loss_ce, optimizer, device, args)
 
 
 if __name__ == "__main__":
     parser = cli.getBasicParser()
-    parser = cli.addTrainingArguments(parser)
-    parser = cli.addClfModelArguments(parser)
+    parser = cli.addClfLoadArguments(parser)
+    parser = cli.addClfTrainArguments(parser)
+    parser = cli.addOptimArguments(parser)
     parser.set_defaults(learning_rate=0.00001,
                         weight_decay=1e-4, epochs=1000, batch_size=16)
     args = parser.parse_args()
     # logging set up
-    logger = setupLogger(__file__, parser)
+    logger = log.setupLogger(__file__, parser)
 
     logger.info(f"Setting manual seed={args.seed} for reproducibility")
     utils.setSeed(args.seed)
@@ -108,4 +109,5 @@ if __name__ == "__main__":
 
     # copy mode_weights file to include param info in the filename
     weights_path = os.path.join(MODEL_DIR, args.model_name)
-    saveCopyWithParams(weights_path, parser)
+    log.saveCopyWithParams(weights_path, parser)
+    log.copy2Logdir(weights_path)
