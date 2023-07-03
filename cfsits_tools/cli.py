@@ -48,7 +48,7 @@ def addClfLoadArguments(parser):
     )
     parser.add_argument(
         "--model-arch",
-        default='TempCNN',
+        default='Inception',
         help='Classification model architecture.'
     )
     return parser
@@ -67,8 +67,9 @@ def addNoiserLoadArguments(parser):
     )
     parser.add_argument(
         '--shrink',
-        action='store_true',
-        default=False,
+        # action='store_const',
+        type=bool,
+        default=True,
         help='Uses softshrink in the noiser model.'
     )
     return parser
@@ -130,7 +131,7 @@ def addNoiserTrainArguments(parser):
     )
     noiser_args.add_argument(
         '--loss-cl-type',
-        default='log',
+        default='margin',
         choices=['log' 'margin'],
         help="Class-swapping loss type. Choose between 'log' or 'margin'."
     )

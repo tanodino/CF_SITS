@@ -398,6 +398,31 @@ if __name__ == "__main__":
         default=False,
         help='Runs plotting functions and writes results to logdir.'
     )
+    # Do inital parse args so that we can check shrink and loss-cl-type options
+    args = parser.parse_args()
+
+    # set defaults according to shring and loss choices:
+    # XXX to complete later when we set defaults for all 4 scenarios
+    if not args.shrink and args.loss_cl_type == 'log':
+        parser.set_defaults(
+            reg_gen=0.5,
+            reg_uni=691.2)
+    # elif args.shrink and args.loss_cl_type == 'log':
+    #     parser.set_defaults(
+    #         reg_gen=..,
+    #         reg_uni=...)
+    elif args.shrink and args.loss_cl_type == 'margin':
+        parser.set_defaults(
+            reg_gen=0.0002,
+            reg_uni=0.28,
+            margin=0.1)
+    # elif not args.shrink and args.loss_cl_type == 'margin':
+    #     parser.set_defaults(
+    #         reg_gen=..,
+    #         reg_uni=..,
+    #         margin=..)
+
+    # parse args again so that new defaults are taken into account
     args = parser.parse_args()
 
     # logging set up
