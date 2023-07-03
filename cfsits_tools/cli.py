@@ -125,7 +125,7 @@ def addNoiserTrainArguments(parser):
     noiser_args.add_argument(
         '--reg-uni',
         type=float,
-        default=0.05,
+        default=691.2,
         help='Weight of the unimodal L1 regularization loss.'
     )
     noiser_args.add_argument(

@@ -197,6 +197,9 @@ def trainModelNoise(
                 torch.sum(torch.square(diff) * to_add_abs, dim=1))
             # uni_reg = torch.mean( torch.sum( to_add_abs, dim=1) )
             # uni_reg = torch.mean( torch.sum( torch.abs(diff) * to_add_abs, dim=1) )
+            # normalize wrt time dimension
+            t_norm = n_timestamps**4
+            uni_reg = uni_reg / t_norm
 
             # Multimodal Regularizer
             # 1) Group reg
