@@ -115,6 +115,51 @@ def launchTraining(args):
         optimizer, optimizerD, loss_bce,
         device, args)
 
+    return model, noiser, x_train
+
+
+
+def computeMetricsPostTraining(model, noiser, x_train, args):
+    logger.info(f"Loading dataset {args.dataset} - test split")
+    if args.dataset == "koumbia":
+        X, y_true = loadSplitNpy(
+            'test', data_path=DATA_DIR, year=args.year, squeeze=True)
+    else:  # load UCR dataset
+        X, y_true = load_UCR_dataset(args.dataset, split='test')
+
+     # setup dataloaders
+    train_dataloader = npyData2DataLoader(x_train, batch_size=2048)
+    dataloader_y_true = npyData2DataLoader(X, y_true, batch_size=2048)
+
+    # compute CF data of the test set
+    y_pred, y_predCF, dataCF, noiseCF = utils.predictionAndCF(
+        model, noiser, dataloader_y_true)
+
+    # print confusion matrix for somples correctly predicted
+    correct_idx = y_true == y_pred
+
+
+    # CF data of train is needed for stability computation
+    _, _, trainCF, _ = utils.predictionAndCF(model, noiser, train_dataloader)
+
+    # Compute predictions for train data
+    y_pred_train = ClfPrediction(model, train_dataloader)
+
+
+    logger.info(f"Metrics computed on test data")
+    # NOte: using default k value for stability metric
+    # (at the moment, default k=5)
+    metrics_dict = metrics.metricsReport(
+        X=X, Xcf=dataCF.squeeze(),
+        y_pred_cf=y_predCF,
+        X_train=x_train,
+        y_pred_train=y_pred_train,
+        Xcf_train=trainCF.squeeze(),
+        ifX=x_train,
+        model=model)
+
+    return metrics_dict
+
 
 def trainModelNoise(
         model, noiser, discr,
@@ -353,7 +398,6 @@ if __name__ == "__main__":
         default=False,
         help='Runs plotting functions and writes results to logdir.'
     )
-
     args = parser.parse_args()
 
     # logging set up
@@ -368,9 +412,13 @@ if __name__ == "__main__":
         os.makedirs(IMG_PATH, exist_ok=True)
 
 
-    launchTraining(args)
+    (model, noiser, x_train) = launchTraining(args)
+    # Make a copy of noiser weights to log dir
     path_file_noiser = os.path.join(MODEL_DIR, args.noiser_name)
     log.saveCopyWithParams(path_file_noiser, parser)
     log.copy2Logdir(path_file_noiser)
 
-
+    # Compute noiser metrics
+    metrics_dict = computeMetricsPostTraining(model, noiser, x_train, args)
+    # Save metrics in json file within the log dir
+    log.saveMetrics(metrics_dict)

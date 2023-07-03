@@ -133,6 +133,20 @@ def includeParamHashSuffix(copy_path, args):
     return copy_path
 
 
+def saveJson(fname, object):
+    logger = logging.getLogger('__main__')
+    fname = fname if fname.endswith('.json') else fname + '.json'
+    path = os.path.join(getLogdir(), fname)
+    with open(path, 'w') as fp:
+        json.dump(object, fp)
+    logger.info(f'Saved to {path} file.')
+
+
+def saveMetrics(metrics_dict):
+    logger = logging.getLogger('__main__')
+    saveJson('metrics', metrics_dict)
+
+
 def saveParams(basefile, args):
     """Save complete set of params to a json file with same basename + .params.json extension"""
     logger = logging.getLogger('__main__')
@@ -141,6 +155,7 @@ def saveParams(basefile, args):
         json.dump(vars(args), fp, sort_keys=True)
     logger.info(f'Full param set of {basefile} saved at {all_params_file}')
 
+
 def loadParams(basefile):
     logger = logging.getLogger('__main__')
     all_params_file = basefile + '.params.json'
@@ -148,6 +163,7 @@ def loadParams(basefile):
     with open(all_params_file) as fp:
         args_d = json.load(fp)
     return args_d
+
 
 def saveCopyWithParams(file_path, parser):
     args = parser.parse_args()
