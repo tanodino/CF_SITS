@@ -177,55 +177,63 @@ def applyIF(clf, x_test):
 def metricsReport(X, Xcf, y_pred=None, y_pred_cf=None, ifX=None,
                   X_train=None, y_pred_train=None, Xcf_train=None, k=5, 
                   Xcf_train_target_class=None, Xcf_target_class=None, model=None):
+    metrics_dict = {}
     # Proximity
     for order in [1, 2, np.inf]:
         proximity_avg = np.mean(proximity(X, Xcf, order=order))
+        metrics_dict[f'proximity_L{order}'] = proximity_avg
         logger.info(f"avg proximity @ norm-{order}: {proximity_avg:0.4f}")
 
     # Relative proximity
     for order in [1, 2, np.inf]:
         rel_prox_avg = np.mean(
             relative_proximity(X, Xcf, y_pred_cf, X_train, y_pred_train, order=order))
+        metrics_dict[f'rel_proximity_L{order}'] = rel_prox_avg
         logger.info(f"avg rel proximity @ norm-{order}: {rel_prox_avg:0.4f}")
 
     # Plausibility
     outlier_estimator = IsolationForest(n_estimators=300).fit(ifX)
     plausibility_avg = np.mean(plausibility(
         X, Xcf, estimator=outlier_estimator))
+    metrics_dict[f'plausibility_L{order}'] = plausibility_avg
     logger.info(f"avg plausibility: {plausibility_avg:0.4f}")
 
     # Validity
     if model is None and y_pred is not None:
         validity_avg = np.mean(validity_from_pred(y_pred, y_pred_cf))
-        logger.info(f"avg validity: {validity_avg:0.4f}")
     elif model is not None:
         validity_avg = np.mean(validity(X, Xcf, model))
-        logger.info(f"avg validity: {validity_avg:0.4f}")
+    metrics_dict[f'validity'] = validity_avg
+    logger.info(f"avg validity: {validity_avg:0.4f}")
 
     # Compactness
     for threshold in [1e-2, 1e-4, 1e-8]: #  1e-3, 1e-4, 1e-8
         compactness_avg = np.mean(compactness(
             X, Xcf, threshold=threshold))
+        exp = np.log10(threshold)
+        metrics_dict[f'compactness_1e{exp:g}'] = validity_avg
         logger.info(f"avg compactness @ threshold={threshold:0.1e}: {compactness_avg:0.4f}")
 
 
     # Stability
     if (X_train is None or Xcf_train is None):
         logger.warning('Counterfactual examples for trainint data are required to compute stability metric, but were missing. Skipping computation')
-
-    elif Xcf_target_class is not None:
-        result = np.NaN * np.ones((X.shape[0]))
-        n_classes = len(np.unique(Xcf_target_class))
-        for dst in range(n_classes):
-            result[Xcf_target_class == dst] = stability(
-                X[Xcf_target_class == dst], 
-                Xcf[Xcf_target_class == dst],
-                k=k, 
-                nnX=X_train[Xcf_train_target_class == dst], 
-                nnXcf=Xcf_train[Xcf_train_target_class == dst])
-        stability_avg = np.mean(result)
-
     else:
-        stability_avg = np.mean(
-            stability(X=X, Xcf=Xcf, k=k, nnX=X_train, nnXcf=Xcf_train))
-    logger.info(f"avg stability: {stability_avg:0.4f}")
+        if Xcf_target_class is not None:
+            result = np.NaN * np.ones((X.shape[0]))
+            n_classes = len(np.unique(Xcf_target_class))
+            for dst in range(n_classes):
+                result[Xcf_target_class == dst] = stability(
+                    X[Xcf_target_class == dst], 
+                    Xcf[Xcf_target_class == dst],
+                    k=k, 
+                    nnX=X_train[Xcf_train_target_class == dst], 
+                    nnXcf=Xcf_train[Xcf_train_target_class == dst])
+            stability_avg = np.mean(result)
+
+        else:
+            stability_avg = np.mean(
+                stability(X=X, Xcf=Xcf, k=k, nnX=X_train, nnXcf=Xcf_train))
+        metrics_dict['stability'] = stability_avg
+        logger.info(f"avg stability: {stability_avg:0.4f}")
+        return metrics_dict
