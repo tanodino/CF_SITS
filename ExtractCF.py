@@ -60,7 +60,7 @@ def launchInference(args):
 
     # Load classification model weights
     logger.info('Loading classifier')
-    model_params = utils.loadWeightsAndParams(model, args.model_name)
+    model_params = log.loadClfMatchingDataset(model, args.model_name, args.dataset)
     logger.info(f'Classifier params: {model_params}')
 
 

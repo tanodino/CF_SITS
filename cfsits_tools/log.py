@@ -3,14 +3,19 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 from shutil import copy2
 import sys
+from typing import Optional
+
+from cfsits_tools import utils
 
 logger = logging.getLogger('__main__')
 
 IGNORE_ARGS = ['do_plots']
+PARAMS_FILE_EXT = '.params.json'
 
-def numericLogLevel(loglevel:str):
+def numericLogLevel(loglevel:str) -> int:
     # assuming loglevel is bound to the string value obtained from the
     # command line argument. Convert to upper case to allow the user to
     # specify --log=DEBUG or --log=debug
@@ -64,7 +69,7 @@ def setupLogger(filename, parser):
     logger.info(f'Parameters: {json.dumps(vars(args), sort_keys=True)}')
     return logger
 
-def getLogdir():
+def getLogdir() -> str :
     log_dir, log_file = os.path.split(logger.handlers[0].baseFilename)
     return log_dir
 
@@ -143,7 +148,6 @@ def saveJson(fname, object):
 
 
 def saveMetrics(metrics_dict):
-    logger = logging.getLogger('__main__')
     saveJson('metrics', metrics_dict)
 
 
@@ -168,7 +172,7 @@ def loadParams(basefile):
 def saveCopyWithParams(file_path, parser):
     args = parser.parse_args()
     # prepare name of the copy including non default params as a suffix
-   # get current root name and extension of the given file_path
+    # get current root name and extension of the given file_path
     root, ext = os.path.splitext(file_path)
     # prepare name of the copy including non default params as a suffix
     copy_path = root + '___' +getSuffixWithParameters(parser)
@@ -187,7 +191,54 @@ def copy2Logdir(file_path):
     log_dir = getLogdir()
     copy2(file_path, log_dir)
     logger.info(f'Saved copy of {file_path} at {log_dir}')
-    param_file = file_path + '.params.json'
+    param_file = file_path + PARAMS_FILE_EXT
     if os.path.exists(param_file):
         copy2(param_file, log_dir)
         logger.info(f'Saved copy of {param_file} at {log_dir}')
+
+
+def saveWeightsAndParams(model, file_name, args, root_dir=None):
+    """ Saves model weights and params to current logdir"""
+    root_dir = root_dir or getLogdir()
+    file_path = utils.saveWeights(model, file_name, root_dir)
+    saveParams(file_path, args)
+
+
+def loadWeightsAndParams(model, file_name, root_dir=None):
+    """ Loads model weights and params from current logdir"""
+    root_dir = root_dir or getLogdir()
+    file_path = utils.loadWeights(model, file_name, root_dir)
+    return loadParams(file_path)
+
+
+def loadModelMatchingDataset(model, model_fname, dataset_name, logs_dir) -> Optional[dict]:
+    trained_models = os.listdir(logs_dir)
+    logger.info(f"Looking for classification model trained on {dataset_name}...")
+    for folder in trained_models:
+        model_path = os.path.join(logs_dir, folder, model_fname)
+        # First check if dataset name is in the folder name
+        # keyword appears either at the start or after double underscore
+        res = re.match(r'(?:\A|__)dataset_(\w+)__',folder)
+        if res is not None and res.group(1) == dataset_name:
+            return loadWeightsAndParams(model, model_path, root_dir='.')
+        # If no match was found maybe the info is only in the params file 
+        elif res is None:
+            # load params file to check for dataset
+            args_d = loadParams(model_path)
+            if args_d['dataset'] == dataset_name:
+                # Note: set model dir to empty string so that nothing is pre-pended to model_path
+                utils.loadWeights(model, model_path, model_dir='.')
+                return args_d
+    msg = f"No model trained on {dataset_name} was found at {logs_dir}."
+    logger.info(msg)
+    raise RuntimeError(msg)
+
+
+def loadClfMatchingDataset(model, model_fname, dataset_name):
+    logs_dir = 'logs/main_classif'
+    return loadModelMatchingDataset(model, model_fname, dataset_name, logs_dir)
+
+
+def loadNoiserMatchingDataset(model, model_fname, dataset_name):
+    logs_dir = 'logs/main_noiser'
+    return loadModelMatchingDataset(model, model_fname, dataset_name, logs_dir)

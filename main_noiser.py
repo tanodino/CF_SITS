@@ -57,7 +57,7 @@ def launchTraining(args):
 
     # Load and freeze classification model
     logger.info('Loading classifier')
-    model_params = utils.loadWeightsAndParams(model, args.model_name)
+    model_params = log.loadClfMatchingDataset(model, args.model_name, args.dataset)
     logger.info(f'Classifier params: {model_params}')
     utils.freezeModel(model)
 
@@ -368,18 +368,18 @@ def trainModelNoise(
             t_avg_all = np.concatenate(t_avg_all, axis=0)
             plt.hist(t_avg_all.squeeze(), bins=np.concatenate(
                 ([-.5], np.arange(n_timestamps))))
-            plt.savefig(os.path.join(IMG_DIR,
+            plt.savefig(os.path.join(IMG_PATH,
                         "epoch_%d_t_avg_hist.jpg" % (e)))
 
             plt.clf()
             plt.plot(np.arange(len(sample)), sample, 'b')
             plt.plot(np.arange(len(sampleCF)), sampleCF, 'r')
             plt.savefig(os.path.join(
-                IMG_DIR, "epoch_%d_from_cl_%d_2cl_%d.jpg" % (e, ex_cl, ex_cfcl)))
+                IMG_PATH, "epoch_%d_from_cl_%d_2cl_%d.jpg" % (e, ex_cl, ex_cfcl)))
             # plt.waitforbuttonpress(0) # this will wait for indefinite time
             # plt.close(fig)
             # exit()
-        utils.saveWeightsAndParams(noiser, args.noiser_name, args)
+        log.saveWeightsAndParams(noiser, args.noiser_name, args)
 
         sys.stdout.flush()
 

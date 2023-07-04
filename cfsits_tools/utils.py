@@ -23,7 +23,6 @@ from sklearn.metrics import normalized_mutual_info_score
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.metrics import accuracy_score
 from tqdm import tqdm
-from cfsits_tools import log
 
 from cfsits_tools.data import loadAllDataNpy, npyData2DataLoader
 from cfsits_tools.model import S2Classif
@@ -93,16 +92,6 @@ def saveWeights(model, file_path, model_dir=None):
     return file_path
 
 
-def loadWeightsAndParams(model, file_path, model_dir=None):
-    file_path = loadWeights(model, file_path, model_dir)
-    return log.loadParams(file_path)
-
-
-def saveWeightsAndParams(model, file_path, args, model_dir=None):
-    file_path = saveWeights(model, file_path, model_dir)
-    log.saveParams(file_path, args)
-
-
 def freezeModel(model):
     for p in model.parameters():
         p.requires_grad = False
@@ -161,6 +150,7 @@ def ClfPredProba(model, data_x, device=None):
 
 
 def evaluate(model, data_xy, device=None):
+    """Computes model's F1 score on given data"""
     device = device or getCurrentDevice()
     labels = []
     pred_tot = []

@@ -37,7 +37,7 @@ def trainModel(model, train, valid, loss_ce, optimizer, device, args):
         logger.info("\t val on VALIDATION %f" % score_valid)
         if score_valid > best_validation:
             best_validation = score_valid
-            utils.saveWeightsAndParams(model, args.model_name, args)
+            log.saveWeightsAndParams(model, args.model_name, args)
             logger.info("\t\t BEST VALID %f" % score_valid)
 
         sys.stdout.flush()
