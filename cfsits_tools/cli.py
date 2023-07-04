@@ -65,10 +65,14 @@ def addNoiserLoadArguments(parser):
         default='MLP',
         help='Noiser (generator) model architecture.'
     )
+
+    def str2bool(s: str) -> bool:
+        if s in {'True', 'False'}: return eval(s) 
+        else: raise TypeError(f"Invalid boolean value {s}")
+
     parser.add_argument(
         '--shrink',
-        # action='store_const',
-        type=bool,
+        type=str2bool,
         default=True,
         help='Uses softshrink in the noiser model.'
     )
