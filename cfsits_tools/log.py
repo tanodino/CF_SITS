@@ -67,6 +67,7 @@ def setupLogger(filename, parser):
     now = strftime("%a, %d %b %Y %H:%M:%S +0000 (GMT)", gmtime())
     logger.info(f'Running {script_name} @ {now}')
     logger.info(f'Parameters: {json.dumps(vars(args), sort_keys=True)}')
+    logger.info(f'Logging to {log_dir}')
     return logger
 
 def getLogdir() -> str :
