@@ -154,15 +154,11 @@ def loadAllDataloaders(data_path=None, year=2020, **loader_kwargs):
     return dataloaders
 
 
-def load_UCR_dataset(name, split, data_path=None):
-    _validate_split(split)
-
+def _loadUCRtsv(name, train_or_test, data_path=None):
     data_path = data_path or DEFAULT_DATA_DIR
-    # if split is valid, need to load train data file
-    file_split = 'TRAIN' if split.lower() == 'valid' else split.upper()
     path = Path(
         data_path, UCR_DIR,
-        name, f"{name}_{file_split}.tsv"
+        name, f"{name}_{train_or_test.upper()}.tsv"
     )
     # load data from tsv file
     data = np.loadtxt(path, delimiter='\t')
@@ -177,11 +173,24 @@ def load_UCR_dataset(name, split, data_path=None):
         y = (y+1)//2
     elif np.all(labels == [3, 4, 5, 6, 7, 8]) :
         y -= 3
+    return datatuple(X, y)
+
+
+def load_UCR_dataset(name, split, data_path=None):
+    _validate_split(split)
+    # if split is valid, need to load train data file
+    file_split = 'TRAIN' if split.lower() == 'valid' else split.upper()
+    X, y = _loadUCRtsv(name, file_split, data_path)
+
+    # min-max-normalize data in X
+    # if current split is test, need to load train data to get max and min 
+    X_train = (_loadUCRtsv(name, 'train', data_path).X
+                  if split.lower() == 'test'
+                  else X)
+    X = (X-X_train.min())/(X_train.max()-X_train.min())
 
     # if split is train or valid, need to split TRAIN file in two parts before returning the result
-    if split.lower() == 'test':
-        return datatuple(X, y)
-    else:
+    if  split.lower() == 'train' or split.lower() == 'valid':
         splitter = StratifiedShuffleSplit(
             n_splits=1, test_size=0.25, random_state=123)
         train_idx, valid_idx = splitter.split(X, y)
@@ -189,6 +198,8 @@ def load_UCR_dataset(name, split, data_path=None):
             return datatuple(X[train_idx], y[train_idx])
         elif split.lower() == 'valid':
             return datatuple(X[valid_idx], y[valid_idx])
+    else:
+        return datatuple(X, y)
 
 
 def list_UCR_datasets(data_path=None):
