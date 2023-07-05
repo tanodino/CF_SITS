@@ -136,7 +136,7 @@ def addNoiserTrainArguments(parser):
     noiser_args.add_argument(
         '--loss-cl-type',
         default='margin',
-        choices=['log' 'margin'],
+        choices=['log', 'margin'],
         help="Class-swapping loss type. Choose between 'log' or 'margin'."
     )
     noiser_args.add_argument(
