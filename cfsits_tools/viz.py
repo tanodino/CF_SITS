@@ -318,16 +318,18 @@ def extractTransitions(pred, pred_CF, noiseCF):
     return hash_source_sink_mtx
 
 
-def printConfMatrix(cm):
-    print("Confusion matrix (original prediction vs. CF prediction):")    
-    print("[")
+def printConfMatrix(cm, log=True):
+    print_fn = logger.info if log else print
+    print_fn("Confusion matrix (original prediction vs. CF prediction):")    
+    print_fn("[")
     for row in cm:
         row_str = ",".join( ['{:5d}'.format(el) for el in row] )
-        print("["+row_str+"],")
-    print("]")    
+        print_fn("["+row_str+"],")
+    print_fn("]")    
 
 
-def printSomeMetrics(y_true, y_pred, pred_CF, noiseCF):
+def printSomeMetrics(y_true, y_pred, pred_CF, noiseCF, log=True):
+    print = logger.info if log else print
     print(f"\nFiltering for classifier's correct predictions ({sum(y_pred==y_true)} out of {y_pred.shape[0]})\n")
     correct_idx = (y_pred==y_true)
 
