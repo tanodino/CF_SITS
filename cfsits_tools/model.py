@@ -110,6 +110,59 @@ class InceptionLayer(nn.Module):
         return output
 
 
+class InceptionBranch(nn.Module):
+    # PyTorch translation of the Keras code in https://github.com/hfawaz/dl-4-tsc
+    def __init__(self, nb_filters=32, use_residual=True,
+                 use_bottleneck=True, bottleneck_size=32, depth=6, kernel_size=41):
+        super(InceptionBranch, self).__init__()
+
+        self.use_residual = use_residual
+
+        # Inception layers
+        self.inception_list = nn.ModuleList(
+            [InceptionLayer(nb_filters,use_bottleneck, bottleneck_size, kernel_size) for _ in range(depth)])
+        # Explicit input sizes (i.e. without using Lazy layers). Requires n_var passed as a constructor input
+        # self.inception_list = nn.ModuleList([InceptionLayer(n_var, nb_filters,use_bottleneck, bottleneck_size, kernel_size) for _ in range(depth)])
+        # for _ in range(1,depth):
+        #     inception = InceptionLayer(4*nb_filters,nb_filters,use_bottleneck, bottleneck_size, kernel_size)
+        #     self.inception_list.append(inception)
+
+        # Fully-connected layer
+        self.gap = nn.AdaptiveAvgPool1d(1)
+        self.out = nn.Flatten()
+
+        # Shortcut layers
+        # First residual layer has n_var channels as inputs while the remaining have 4*nb_filters
+        self.conv = nn.ModuleList([
+            nn.LazyConv1d(4*nb_filters, kernel_size=1,
+                            stride=1, padding="same", bias=False)
+            for _ in range(int(depth/3))
+        ])
+        self.bn = nn.ModuleList([nn.BatchNorm1d(4*nb_filters) for _ in range(int(depth/3))])
+        self.relu = nn.ModuleList([nn.ReLU() for _ in range(int(depth/3))])
+
+    def _shortcut_layer(self, input_tensor, out_tensor, id):
+        shortcut_y = self.conv[id](input_tensor)
+        shortcut_y = self.bn[id](shortcut_y)
+        x = torch.add(shortcut_y, out_tensor)
+        x = self.relu[id](x)
+        return x
+
+    def forward(self, x):
+        input_res = x
+
+        for d, inception in enumerate(self.inception_list):
+            x = inception(x)
+
+            # Residual layer
+            if self.use_residual and d % 3 == 2:
+                x = self._shortcut_layer(input_res,x, int(d/3))
+                input_res = x
+
+        gap_layer = self.gap(x)
+        return self.out(gap_layer)
+
+
 class Inception(nn.Module):
     # PyTorch translation of the Keras code in https://github.com/hfawaz/dl-4-tsc
     def __init__(self, nb_classes, nb_filters=32, use_residual=True,
@@ -249,7 +302,7 @@ class BinaryClassif(nn.Module):
 class Discr(nn.Module):
     def __init__(self,
                  dropout_rate=0.0,
-                 encoder='TempCNN',
+                 encoder='Inception',
                  encoder_params=None,
                  hidden_activation='relu',
                  output_activation='softmax',
@@ -257,11 +310,15 @@ class Discr(nn.Module):
                  **kwargs):
         super(Discr, self).__init__(**kwargs)
         if encoder == 'TempCNN':
+            encoder_class = S2Branch
             if encoder_params is None:
                 encoder_params = dict(dropout_rate=dropout_rate)
-            self.encoder = S2Branch(**encoder_params)
         elif encoder == 'Inception':
-            self.encoder == Inception(**encoder_params)
+            encoder_class = InceptionBranch
+            encoder_params = encoder_params or dict()
+        self.encoder = encoder_class(**encoder_params)
+
+
         self.HeadBCl = BinaryClassif(dropout_rate=dropout_rate)
 
     def forward(self, inputs):

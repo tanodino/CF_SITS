@@ -118,7 +118,7 @@ def addNoiserTrainArguments(parser):
     noiser_args = parser.add_argument_group('Noiser training args')
     noiser_args.add_argument(
         "--discr-arch",
-        default='TempCNN',
+        default='Inception',
         help='Discriminator model architecture.'
     )
     noiser_args.add_argument(
