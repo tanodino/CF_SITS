@@ -49,6 +49,9 @@ def launchInference(args):
     logger.info(f'x_train shape: {x_train.shape}')
     logger.info(f'X shape: {X.shape}')
 
+    # device setup
+    utils.setFreeDevice()
+    device = utils.getCurrentDevice()
 
     # Classification model
     if args.model_arch == 'TempCNN':
@@ -62,6 +65,7 @@ def launchInference(args):
     logger.info('Loading classifier')
     model_params = log.loadClfMatchingDataset(model, args.model_name, args.dataset)
     logger.info(f'Classifier params: {model_params}')
+    model.to(device)
 
 
     # noiser model
@@ -70,18 +74,15 @@ def launchInference(args):
         out_dim=n_timestamps,
         shrink=args.shrink,
         base_arch=args.noiser_arch)
+    noiser.to(device)
 
     # Load noiser model weights
     logger.info('Loading noiser')
-    noiser_params = utils.loadWeightsAndParams(noiser, args.noiser_name)
+    noiser_params = log.loadWeightsAndParams(
+        noiser, args.noiser_name, args.noiser_path)
     logger.info(f'Noiser params: {noiser_params}')
 
 
-    # device setup
-    utils.setFreeDevice()
-    device = utils.getCurrentDevice()
-    model.to(device)
-    noiser.to(device)
 
     # setup dataloaders
     train_dataloader = npyData2DataLoader(x_train, batch_size=2048)
@@ -114,21 +115,22 @@ def launchInference(args):
         # random_state=args.seed)
 
 
+    # Compute predictions and CFs for train data
     # CF data of train is needed for stability computation
-    _, _, trainCF, _ = predictionAndCF(model, noiser, train_dataloader)
-
-    # Compute predictions for train data
-    y_pred_train = ClfPrediction(model, train_dataloader)
+    y_pred_train, _, trainCF, _ = predictionAndCF(model, noiser, train_dataloader)
 
 
     logger.info(f"Metrics computed on {args.split} data")
-    metrics.metricsReport(
+    metrics_dict = metrics.metricsReport(
         X=X, Xcf=dataCF.squeeze(),
         y_pred_cf=y_predCF,
         X_train=x_train,
         y_pred_train=y_pred_train,
         Xcf_train=trainCF.squeeze(),
         ifX=x_train, k=args.stability_k, model=model)
+    
+    # Save metrics in json file within the log dir
+    log.saveMetrics(metrics_dict, args.noiser_path)
 
 
 if __name__ == "__main__":
@@ -137,18 +139,21 @@ if __name__ == "__main__":
     parser = cli.addNoiserLoadArguments(parser)
     parser = cli.addInferenceParams(parser)
     parser.add_argument(
+        'noiser_path',
+        help='Folder within logs/main_noiser where noiser model weights file NOISER_NAME is stored.'
+    )
+    parser.add_argument(
         '--stability-k',
         type=int,
         default=5,
         help='Number of neighbors used to compute stability metric.'
-        'Used only during evaluation (mode=pred).'
     )
 
     parser.add_argument(
         '--do-plots',
         action='store_true',
         default=False,
-        help='Runs plotting functions and writes results to logdir.'
+        help='Runs plotting functions and writes results to NOISER_PATH.'
     )
 
     args = parser.parse_args()
@@ -158,8 +163,10 @@ if __name__ == "__main__":
     logger.info(f"Setting manual seed={args.seed} for reproducibility")
     utils.setSeed(args.seed)
 
-    # Create img dir within log dir if needed
-    IMG_PATH = os.path.join(log.getLogdir(), 'img')
+    # prepend logs/main_noiser to noiser path
+    args.noiser_path = os.path.join('logs','main_noiser', args.noiser_path)
+    # Create img dir within noiser_dir if needed
+    IMG_PATH = os.path.join(args.noiser_path, 'img')
     if args.do_plots:
         os.makedirs(IMG_PATH, exist_ok=True)
 
