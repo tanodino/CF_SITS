@@ -195,7 +195,7 @@ def metricsReport(X, Xcf, y_pred=None, y_pred_cf=None, ifX=None,
     outlier_estimator = IsolationForest(n_estimators=300).fit(ifX)
     plausibility_avg = np.mean(plausibility(
         X, Xcf, estimator=outlier_estimator))
-    metrics_dict[f'plausibility_L{order}'] = plausibility_avg
+    metrics_dict[f'plausibility'] = plausibility_avg
     logger.info(f"avg plausibility: {plausibility_avg:0.4f}")
 
     # Validity
