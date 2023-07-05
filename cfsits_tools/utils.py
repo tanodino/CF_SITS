@@ -35,6 +35,7 @@ logger = logging.getLogger('__main__')
 
 
 def setSeed(seed=0):
+    """Seeds Numpy and torch RNGs with the given seed."""
     np.random.seed(seed)
     torch.manual_seed(seed)
 
@@ -79,7 +80,8 @@ def sendToDevice(torchObjList, device=None):
 def loadWeights(model, file_path, model_dir=None):
     model_dir = model_dir or DEFAULT_MODEL_DIR
     file_path = os.path.join(model_dir, file_path)
-    model.load_state_dict(torch.load(file_path))
+    state_dict = torch.load(file_path, map_location=getCurrentDevice())
+    model.load_state_dict(state_dict)
     logger.info(f"Loaded weights from {file_path}")
     return file_path
 
@@ -124,6 +126,7 @@ def loadPklModel(file_path, model_dir=None):
 
 
 def ClfPrediction(model, data_x, device=None):
+    """Infers model predictions (class ID) on data_x"""
     device = device or getCurrentDevice()
     pred_all = []
     model.eval()
@@ -180,7 +183,11 @@ def generateCF(noiser, loader, device=None):
 
 
 def predictionAndCF(model, noiser, data, device=None):
-    """from ExtractCF.py, more complete than the one from generateCF.py"""
+    """
+    Computes CFs for given data, then infers predictions (class ID) for orginal data and CFs. 
+
+    Legacy note: from ExtractCF.py, more complete than the one from generateCF.py
+    """
     device = device or getCurrentDevice()
     labels = []
     pred_tot = []
