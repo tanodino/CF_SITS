@@ -107,7 +107,3 @@ if __name__ == "__main__":
 
     launchTraining(args)
 
-    # copy mode_weights file to include param info in the filename
-    weights_path = os.path.join(MODEL_DIR, args.model_name)
-    log.saveCopyWithParams(weights_path, parser)
-    log.copy2Logdir(weights_path)

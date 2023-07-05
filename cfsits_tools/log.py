@@ -139,21 +139,25 @@ def includeParamHashSuffix(copy_path, args):
     return copy_path
 
 
-def saveJson(fname, object):
+def saveJson(fname, object, root_dir=None):
+    root_dir = root_dir or getLogdir()
     logger = logging.getLogger('__main__')
     fname = fname if fname.endswith('.json') else fname + '.json'
-    path = os.path.join(getLogdir(), fname)
+    path = os.path.join(root_dir, fname)
     with open(path, 'w') as fp:
         json.dump(object, fp)
     logger.info(f'Saved to {path} file.')
 
 
-def saveMetrics(metrics_dict):
-    saveJson('metrics', metrics_dict)
+def saveMetrics(metrics_dict, root_dir=None):
+    saveJson('metrics', metrics_dict, root_dir)
 
 
 def saveParams(basefile, args):
-    """Save complete set of params to a json file with same basename + .params.json extension"""
+    """
+    Save complete set of params to a json file with same basename + .params.json extension
+    Keys in the dictionary get sorted before saving.
+    """
     logger = logging.getLogger('__main__')
     all_params_file = basefile + '.params.json'
     with open(all_params_file, 'w') as fp:
@@ -199,14 +203,18 @@ def copy2Logdir(file_path):
 
 
 def saveWeightsAndParams(model, file_name, args, root_dir=None):
-    """ Saves model weights and params to current logdir"""
+    """Saves model weights and params to current logdir 
+    (or rood_dir if given)
+    """
     root_dir = root_dir or getLogdir()
     file_path = utils.saveWeights(model, file_name, root_dir)
     saveParams(file_path, args)
 
 
 def loadWeightsAndParams(model, file_name, root_dir=None):
-    """ Loads model weights and params from current logdir"""
+    """ Loads model weights and params from current logdir
+    (or rood_dir if given)
+    """
     root_dir = root_dir or getLogdir()
     file_path = utils.loadWeights(model, file_name, root_dir)
     return loadParams(file_path)

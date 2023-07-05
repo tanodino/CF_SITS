@@ -347,7 +347,7 @@ def trainModelNoise(
         subset_idx = np.where(pred == orig_label)[0]
 
         cm = confusion_matrix(pred[subset_idx], pred_cf[subset_idx])
-        print(cm)
+        logger.info(cm)
 
         number_of_changes = len(
             np.where(pred[subset_idx] != pred_cf[subset_idx])[0])
@@ -438,10 +438,7 @@ if __name__ == "__main__":
 
 
     (model, noiser, x_train) = launchTraining(args)
-    # Make a copy of noiser weights to log dir
-    path_file_noiser = os.path.join(MODEL_DIR, args.noiser_name)
-    log.saveCopyWithParams(path_file_noiser, parser)
-    log.copy2Logdir(path_file_noiser)
+    # Note: model is saved regularly during training 
 
     # Compute noiser metrics
     metrics_dict = computeMetricsPostTraining(model, noiser, x_train, args)
