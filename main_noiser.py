@@ -353,7 +353,7 @@ def trainModelNoise(
             np.where(pred[subset_idx] != pred_cf[subset_idx])[0])
         logger.info("NUMBER OF CHANGED PREDICTIONS : %d over %d, original size is %d" % (
             number_of_changes, pred[subset_idx].shape[0], pred.shape[0]))
-
+        # XXX breaks if no prodictions were changed
         idx_list = np.where(pred != pred_cf)[0]
         idx_list = shuffle(idx_list)
         idx = idx_list[0]
@@ -409,8 +409,9 @@ if __name__ == "__main__":
             reg_uni=691.2)
     # elif args.shrink and args.loss_cl_type == 'log':
     #     parser.set_defaults(
-    #         reg_gen=..,
-    #         reg_uni=...)
+    #         reg_gen=0.0002,
+    #         reg_uni=691.2,
+    # )
     elif args.shrink and args.loss_cl_type == 'margin':
         parser.set_defaults(
             reg_gen=0.0002,
@@ -418,9 +419,9 @@ if __name__ == "__main__":
             margin=0.1)
     # elif not args.shrink and args.loss_cl_type == 'margin':
     #     parser.set_defaults(
-    #         reg_gen=..,
-    #         reg_uni=..,
-    #         margin=..)
+    #         reg_gen=0.0002,
+    #         reg_uni=691.2,
+    #         margin=0.1)
 
     # parse args again so that new defaults are taken into account
     args = parser.parse_args()
