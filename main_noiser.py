@@ -353,7 +353,7 @@ def trainModelNoise(
             np.where(pred[subset_idx] != pred_cf[subset_idx])[0])
         logger.info("NUMBER OF CHANGED PREDICTIONS : %d over %d, original size is %d" % (
             number_of_changes, pred[subset_idx].shape[0], pred.shape[0]))
-        # XXX breaks if no prodictions were changed
+        # XXX breaks if no predictions were changed
         idx_list = np.where(pred != pred_cf)[0]
         idx_list = shuffle(idx_list)
         idx = idx_list[0]
