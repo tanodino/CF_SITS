@@ -208,11 +208,14 @@ def metricsReport(X, Xcf, y_pred=None, y_pred_cf=None, ifX=None,
 
     # Compactness
     for threshold in [1e-2, 1e-4, 1e-8]: #  1e-3, 1e-4, 1e-8
-        compactness_avg = np.mean(compactness(
-            X, Xcf, threshold=threshold))
+        c = compactness(X, Xcf, threshold=threshold)
+        compactness_avg = np.mean(c)
+        compactness_std = np.std(c)
         exp = np.log10(threshold)
         metrics_dict[f'compactness_1e{exp:g}'] = compactness_avg
-        logger.info(f"avg compactness @ threshold={threshold:0.1e}: {compactness_avg:0.4f}")
+        logger.info(f"avg compactness @ threshold={threshold:0.1e}:"
+                    f" {compactness_avg:0.4f} (+-{compactness_std:0.4f})"
+                    f" (min: {c.min():0.4f}, max: {c.max():0.4f})")
 
 
     # Stability
