@@ -97,24 +97,6 @@ def launchInference(args):
     cm = confusion_matrix(y_pred[correct_idx], y_predCF[correct_idx])
     viz.printConfMatrix(cm)
 
-    if args.do_plots:
-        # write plots and tables
-        # Prepare output path
-        output_folder = IMG_PATH
-        # output_folder = Path(
-        #     IMG_PATH,
-        #     # f"{args.model_name}_{args.noiser_name}",
-        #     f"{args.split}")
-        os.makedirs(output_folder, exist_ok=True)
-
-        viz.produceResults(args.split, output_folder, y_true,
-                           y_pred, y_predCF, dataCF, noiseCF)
-
-        # TSNE
-        # plotTSNE(y_true, pred, predCF, noise_CF, output_folder,
-        # random_state=args.seed)
-
-
     # Compute predictions and CFs for train data
     # CF data of train is needed for stability computation
     y_pred_train, _, trainCF, _ = predictionAndCF(model, noiser, train_dataloader)
@@ -129,8 +111,30 @@ def launchInference(args):
         Xcf_train=trainCF.squeeze(),
         ifX=x_train, k=args.stability_k, model=model)
     
+
+
     # Save metrics in json file within the log dir
     log.saveMetrics(metrics_dict, args.noiser_path)
+
+    if args.do_plots:
+        logger.info("Doing plots...")
+        # write plots and tables
+        # Prepare output path
+        output_folder = IMG_PATH
+        # output_folder = Path(
+        #     IMG_PATH,
+        #     # f"{args.model_name}_{args.noiser_name}",
+        #     f"{args.split}")
+        os.makedirs(output_folder, exist_ok=True)
+
+        viz.produceResults(args.split, output_folder, y_true,
+                           y_pred, y_predCF, dataCF, noiseCF)
+        
+
+        # TSNE
+        # plotTSNE(y_true, pred, predCF, noise_CF, output_folder,
+        # random_state=args.seed)
+        logger.info("Plots done")
 
 
 if __name__ == "__main__":
