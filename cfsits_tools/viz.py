@@ -330,9 +330,8 @@ def printConfMatrix(cm, log=True):
 
 def printSomeMetrics(y_true, y_pred, pred_CF, noiseCF, log=True):
     print = logger.info if log else print
-    print(f"\nFiltering for classifier's correct predictions ({sum(y_pred==y_true)} out of {y_pred.shape[0]})\n")
-    correct_idx = (y_pred==y_true)
 
+    correct_idx = (y_pred==y_true)
     number_of_changes = sum(y_pred[correct_idx] != pred_CF[correct_idx])
     print("NUMER OF CHANGED PREDICTIONS : %d over %d, original size is %d"%(number_of_changes, y_pred[correct_idx].shape[0], y_pred.shape[0]))
 
@@ -345,6 +344,7 @@ def printSomeMetrics(y_true, y_pred, pred_CF, noiseCF, log=True):
     print(f'Noise avg. L0 norm (>0): {np.mean(np.abs(noiseCF)>0,axis=1).mean()} (+- {np.mean(np.abs(noiseCF)>0,axis=1).std()})')
 
 
+    print(f"\nFiltering for classifier's correct predictions ({sum(y_pred==y_true)} out of {y_pred.shape[0]})")
     print(f'\nNoise avg. L2 norm: {np.linalg.norm(noiseCF[correct_idx], ord=2, axis=1).mean()} (+- {np.linalg.norm(noiseCF[correct_idx], ord=2, axis=1).std()})')
     print(f'Noise avg. L1 norm: {np.linalg.norm(noiseCF[correct_idx], ord=1, axis=1).mean()} (+- {np.linalg.norm(noiseCF[correct_idx], ord=1, axis=1).std()})')
     print(f'Noise avg. L0 norm (>1e-2): {np.mean(np.abs(noiseCF[correct_idx])>1e-2,axis=1).mean()} (+- {np.mean(np.abs(noiseCF[correct_idx])>1e-2,axis=1).std()})')
