@@ -287,3 +287,5 @@ fig.show()
 # grid.figure.suptitle('lower is better')
 
 # %%
+# Try later
+# https://www.blog.dailydoseofds.com/p/declutter-your-jupyter-notebook-using
