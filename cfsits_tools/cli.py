@@ -4,8 +4,8 @@ from cfsits_tools.data import VALID_SPLITS, list_UCR_datasets
 from cfsits_tools.log import numericLogLevel
 
 
-def getBasicParser():
-    parser = ArgumentParser(
+def getBasicParser(description:str|None=None):
+    parser = ArgumentParser(description=description,
         formatter_class=ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         "--dataset",

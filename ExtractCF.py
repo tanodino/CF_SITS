@@ -138,7 +138,9 @@ def launchInference(args):
 
 
 if __name__ == "__main__":
-    parser = cli.getBasicParser()
+    parser = cli.getBasicParser(
+        description="This script will run a noiser model to generate counterfactuals and extract perfomance metrics and plots. An execution log is saved within a dedicated folder inlogs/ExtractFC. Everything else (metrics, plots) gets saved to the same directory where the noiser model was found."
+    )
     parser = cli.addClfLoadArguments(parser)
     parser = cli.addNoiserLoadArguments(parser)
     parser = cli.addInferenceParams(parser)

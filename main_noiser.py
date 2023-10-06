@@ -385,7 +385,8 @@ def trainModelNoise(
 
 
 if __name__ == "__main__":
-    parser = cli.getBasicParser()
+    parser = cli.getBasicParser(
+        description="This script trains a noiser model for counterfatual example generation, given a particular classifier (clf). It will try to load a clf corresponding to the dataset chosen via command-line parameters, and terminate if no matching clf is found.")
     parser = cli.addClfLoadArguments(parser)
     parser = cli.addNoiserLoadArguments(parser)
     parser = cli.addNoiserTrainArguments(parser)

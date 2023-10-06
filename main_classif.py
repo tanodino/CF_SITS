@@ -92,7 +92,8 @@ def launchTraining(args):
 
 
 if __name__ == "__main__":
-    parser = cli.getBasicParser()
+    parser = cli.getBasicParser(
+        description="Trains a classification model on a chosen dataset. Several hyperparameters can be chosen via cli arguments. Model weights and metadata get saved to a dedicated directory within logs/main_classif.")
     parser = cli.addClfLoadArguments(parser)
     parser = cli.addClfTrainArguments(parser)
     parser = cli.addOptimArguments(parser)
