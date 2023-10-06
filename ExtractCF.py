@@ -1,4 +1,5 @@
 # KOUMBIA
+import argparse
 import os
 from pathlib import Path
 import logging
@@ -77,11 +78,9 @@ def launchInference(args):
     noiser.to(device)
 
     # Load noiser model weights
-    logger.info('Loading noiser')
-    noiser_params = log.loadWeightsAndParams(
+    logger.info('Loading noiser weights')
+    _ = log.loadWeightsAndParams(
         noiser, args.noiser_name, args.noiser_path)
-    logger.info(f'Noiser params: {noiser_params}')
-
 
 
     # setup dataloaders
@@ -171,6 +170,15 @@ if __name__ == "__main__":
 
     # prepend logs/main_noiser to noiser path
     args.noiser_path = os.path.join('logs','main_noiser', args.noiser_path)
+
+    # read noiser params from folder to update args
+    # some of them are needed to load both  classifier and noiser models
+    noiser_params = log.loadParams(os.path.join(args.noiser_path,args.noiser_name))
+    logger.info(f'Noiser params: {noiser_params}')
+    args_d = vars(args)
+    args_d.update(noiser_params)
+    args = argparse.Namespace(**args_d)
+
     # Create img dir within noiser_dir if needed
     IMG_PATH = os.path.join(args.noiser_path, 'img')
     if args.do_plots:
@@ -178,5 +186,5 @@ if __name__ == "__main__":
 
     launchInference(args)
 
-    # main(args)
+
 
