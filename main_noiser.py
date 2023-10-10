@@ -309,17 +309,17 @@ def trainModelNoise(
 
         data, dataCF, pred, pred_cf, orig_label = generateOrigAndAdd(
             model, noiser, train_dataloader, device)
-        # print("F1 SCORE original model %f"%f1_score(orig_label, pred,average="weighted"))
+        # print("F1 SCORE original model %f"%f1_score(orig_label, pred,average="weighted")) # Does not apply when using the predicted labels in the dataloader
 
-        subset_idx = np.where(pred == orig_label)[0]
+        subset_idx = np.where(pred == orig_label)[0] # returns all idx when using the predicted labels in the dataloader
 
         cm = confusion_matrix(pred[subset_idx], pred_cf[subset_idx])
         number_of_changes = len(
             np.where(pred[subset_idx] != pred_cf[subset_idx])[0])
 
-        logger.info(f'Changed Predictions: {number_of_changes} over {pred[subset_idx].shape[0]} '
-                    f'(original size is {pred.shape[0]})\n'
-                    f'Confusion matrix = \n{cm}')
+        logger.info(f'Changed Predictions: {number_of_changes} over {pred[subset_idx].shape[0]}'
+                    # f'(original size is {pred.shape[0]})' # Redundant info when using the predicted labels in the dataloader
+                    f'\nConfusion matrix = \n{cm}')
 
         # XXX breaks if no predictions were changed
         idx_list = np.where(pred != pred_cf)[0]
@@ -346,7 +346,6 @@ def trainModelNoise(
                 IMG_PATH, "epoch_%d_from_cl_%d_2cl_%d.jpg" % (e, ex_cl, ex_cfcl)))
             # plt.waitforbuttonpress(0) # this will wait for indefinite time
             # plt.close(fig)
-            # exit()
         log.saveWeightsAndParams(noiser, args.noiser_name, args)
 
         sys.stdout.flush()
