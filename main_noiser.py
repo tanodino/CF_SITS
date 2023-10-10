@@ -175,15 +175,14 @@ def trainModelNoise(
     for e in range(args.epochs):
         loss_acc = []
         loss_discr = []
-        loss_reg_L1 = []
-        loss_reg_L2 = []
-        loss_reg_entro = []
         loss_cl = []
         loss_reg_tv = []
         loss_generator = []
         loss_uni = []
         t_avg_all = []
-        non_zeros = []  # just to track sparsity
+        # loss_reg_L1 = []
+        # loss_reg_L2 = []
+        # non_zeros = []  # just to track sparsity
 
         for x_batch, y_batch in train_dataloader:
             noiser.zero_grad()
@@ -202,6 +201,7 @@ def trainModelNoise(
             y_ohe = F.one_hot(y_batch.long(), num_classes=n_classes)
             prob = torch.sum(prob_cl * y_ohe, dim=1)
 
+            # ---- Class-swapping loss ----
             if args.loss_cl_type == "log":
                 loss_classif = torch.mean(-torch.log(1. -
                                           prob + torch.finfo(torch.float32).eps))
@@ -210,11 +210,7 @@ def trainModelNoise(
                 loss_classif = torch.mean(-torch.log(1. - torch.maximum(
                     prob + args.margin - max_other, torch.tensor(0)) + torch.finfo(torch.float32).eps))
 
-            # Entropy regularizer
-            reg_entro = torch.mean(
-                torch.sum(torch.special.entr(prob_cl), dim=1))
-
-            # Unimodal Regularizer
+            # ---- Unimodal Regularizer ----
             # Compute central time
             to_add_abs = torch.abs(np.squeeze(to_add))
             # 1) center of mass
@@ -246,7 +242,7 @@ def trainModelNoise(
             t_norm = n_timestamps**4
             uni_reg = uni_reg / t_norm
 
-            # Multimodal Regularizer
+            # ---- Multimodal Regularizer ----
             # 1) Group reg
             # regulariser = 0
             # for k in range(1,n_timestamps+1):
@@ -261,34 +257,21 @@ def trainModelNoise(
             # diff,_ = torch.min(diff,dim=1) # closest centroid
             # multi_reg = torch.mean( torch.sum( torch.square(diff) * to_add_abs, dim=1) )
 
+            # ---- Other regularizers (unused) ----
+            # Entropy regularizer
+            # reg_entro = torch.mean(torch.sum(torch.special.entr(prob_cl), dim=1))
             # Total Variation Regularizer L1
-            reg_tv = torch.mean(torch.sum(torch.abs(torch.squeeze(
-                to_add[:, :, 1:] - to_add[:, :, :-1])), dim=1))
-
+            # reg_tv = torch.mean(torch.sum(torch.abs(torch.squeeze(to_add[:, :, 1:] - to_add[:, :, :-1])), dim=1))
             # Total Variation Regularizer L2
             # reg_tv = torch.mean( torch.sum( torch.square( torch.squeeze(to_add[:,:,1:] - to_add[:,:,:-1]) ),dim=1) )
-            # loss += reg_tv
-
             # L1 regularizer
-            reg_L1 = torch.mean(
-                torch.sum(torch.abs(torch.squeeze(to_add)), dim=1))
-            # loss += 5.*reg_L1
-
+            # reg_L1 = torch.mean(torch.sum(torch.abs(torch.squeeze(to_add)), dim=1))
             # L2 Regularization
-            reg_L2 = torch.mean(
-                torch.sum(torch.square(torch.squeeze(to_add)), dim=1))
-            # loss +=
-
+            # reg_L2 = torch.mean(torch.sum(torch.square(torch.squeeze(to_add)), dim=1))
             # L0 norm (to track sparsity)
-            L0 = torch.mean(torch.count_nonzero(
-                torch.squeeze(to_add), dim=1).float())
+            # L0 = torch.mean(torch.count_nonzero(torch.squeeze(to_add), dim=1).float())
 
-            # magnitude, _ = torch.max( torch.abs( torch.squeeze(x_cf) - torch.squeeze(x_batch) ), dim=1)
-            # reg_sim = torch.mean( magnitude )
-            # loss+=reg_sim
-
-            # loss_d = 0.0
-
+            # ---- Discriminator ----
             # discr.zero_grad()
             real_output = discr(x_batch).view(-1)
             fake_output = discr(x_batch + to_add.detach()).view(-1)
@@ -297,62 +280,47 @@ def trainModelNoise(
                 real_output, fake_output, loss_bce, device)
             loss_d.backward()
             optimizerD.step()
-            # print("=========")
 
             # optimizer.zero_grad()
             fake_output_2 = discr(x_cf)
             fake_output_2 = torch.squeeze(fake_output_2)
             loss_g = generator_loss(fake_output_2, loss_bce, device)
 
-            # loss_g = .5*loss_g
-
-            # loss = 4*loss_classif + .1*uni_reg + .01*reg_L2 + .01*reg_tv + loss_g
-
-            # .5*loss_g + .05*uni_reg #+ .05*reg_L2 + .05*reg_tv
+            # ---- Total Noiser Loss ----
             loss = 1.*loss_classif + args.reg_gen*loss_g + args.reg_uni*uni_reg
             loss.backward()
             optimizer.step()
 
             loss_acc.append(loss.cpu().detach().numpy())
-            # loss_discr.append( 0 )
             loss_discr.append(loss_d.cpu().detach().numpy())
 
             loss_cl.append(loss_classif.cpu().detach().numpy())
-            loss_reg_entro.append(0)
-            # loss_reg_entro.append(reg_entro.cpu().detach().numpy() )
-            loss_reg_tv.append(reg_tv.cpu().detach().numpy())
-            # loss_reg_tv.append( 0 )
-            loss_reg_L1.append(reg_L1.cpu().detach().numpy())
-            # loss_reg_L1.append( 0 )
-            loss_reg_L2.append(reg_L2.cpu().detach().numpy())
-            # loss_reg_L2.append( 0 )
             loss_generator.append(loss_g.cpu().detach().numpy())
-            # loss_generator.append( 0 )
             loss_uni.append(uni_reg.cpu().detach().numpy())
             t_avg_all.append(t_avg.cpu().detach().numpy())
-            non_zeros.append(L0.cpu().detach().numpy())
+            # loss_reg_tv.append(reg_tv.cpu().detach().numpy())
+            # loss_reg_L1.append(reg_L1.cpu().detach().numpy())
+            # loss_reg_L2.append(reg_L2.cpu().detach().numpy())
+            # non_zeros.append(L0.cpu().detach().numpy())
 
-        logger.info("epoch %d with Gen loss %f (l_GEN %f l_CL %f and reg_L1 %f and l_TV %f and reg_L2 %f and reg_UNI %f) and Discr Loss %f and L0 %.1f" % (e, np.mean(loss_acc), np.mean(
-            loss_generator), np.mean(loss_cl), np.mean(loss_reg_L1), np.mean(loss_reg_tv), np.mean(loss_reg_L2), np.mean(loss_uni), np.mean(loss_discr), np.mean(non_zeros)))
+        logger.info("[EPOCH %d] Noiser loss = %f (l_GEN %f l_CL %f reg_UNI %f) and Discr Loss = %f"
+                    % (e, np.mean(loss_acc), np.mean(loss_generator), np.mean(loss_cl), np.mean(loss_uni), np.mean(loss_discr)))
+        # logger.info("l_TV %f reg_L1 %f reg_L2 %f L0 %.1f" % (np.mean(loss_reg_tv), np.mean(loss_reg_L1), np.mean(loss_reg_L2), np.mean(non_zeros)))
+
         data, dataCF, pred, pred_cf, orig_label = generateOrigAndAdd(
             model, noiser, train_dataloader, device)
         # print("F1 SCORE original model %f"%f1_score(orig_label, pred,average="weighted"))
-        # exit()
-        '''
-        hashOrig2Pred = computeOrig2pred(orig_label, pred)
-        for k in hashOrig2Pred.keys():
-            print("\t ",k," -> ",hashOrig2Pred[k])
-        print("========")
-        '''
+
         subset_idx = np.where(pred == orig_label)[0]
 
         cm = confusion_matrix(pred[subset_idx], pred_cf[subset_idx])
-        logger.info(cm)
-
         number_of_changes = len(
             np.where(pred[subset_idx] != pred_cf[subset_idx])[0])
-        logger.info("NUMBER OF CHANGED PREDICTIONS : %d over %d, original size is %d" % (
-            number_of_changes, pred[subset_idx].shape[0], pred.shape[0]))
+
+        logger.info(f'Changed Predictions: {number_of_changes} over {pred[subset_idx].shape[0]} '
+                    f'(original size is {pred.shape[0]})\n'
+                    f'Confusion matrix = \n{cm}')
+
         # XXX breaks if no predictions were changed
         idx_list = np.where(pred != pred_cf)[0]
         idx_list = shuffle(idx_list)
