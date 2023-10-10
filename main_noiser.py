@@ -303,8 +303,8 @@ def trainModelNoise(
             # loss_reg_L2.append(reg_L2.cpu().detach().numpy())
             # non_zeros.append(L0.cpu().detach().numpy())
 
-        logger.info("[EPOCH %d] Noiser loss = %f (l_GEN %f l_CL %f reg_UNI %f) and Discr Loss = %f"
-                    % (e, np.mean(loss_acc), np.mean(loss_generator), np.mean(loss_cl), np.mean(loss_uni), np.mean(loss_discr)))
+        logger.info("[EPOCH %d] Noiser loss = %.3E (l_CL %.3E l_GEN %.3E reg_UNI %.3e) and Discr Loss = %.3E"
+                    % (e, np.mean(loss_acc), np.mean(loss_cl), args.reg_gen*np.mean(loss_generator), args.reg_uni*np.mean(loss_uni), np.mean(loss_discr)))
         # logger.info("l_TV %f reg_L1 %f reg_L2 %f L0 %.1f" % (np.mean(loss_reg_tv), np.mean(loss_reg_L1), np.mean(loss_reg_L2), np.mean(non_zeros)))
 
         data, dataCF, pred, pred_cf, orig_label = generateOrigAndAdd(
