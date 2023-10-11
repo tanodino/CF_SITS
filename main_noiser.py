@@ -321,31 +321,35 @@ def trainModelNoise(
                     # f'(original size is {pred.shape[0]})' # Redundant info when using the predicted labels in the dataloader
                     f'\nConfusion matrix = \n{cm}')
 
-        # XXX breaks if no predictions were changed
-        idx_list = np.where(pred != pred_cf)[0]
-        idx_list = shuffle(idx_list)
-        idx = idx_list[0]
-        sample = np.squeeze(data[idx])
-        sampleCF = np.squeeze(dataCF[idx])
-        ex_cl = pred[idx]
-        ex_cfcl = pred_cf[idx]
 
-        # Central time histogram
         if args.do_plots:
-            plt.clf()
-            t_avg_all = np.concatenate(t_avg_all, axis=0)
-            plt.hist(t_avg_all.squeeze(), bins=np.concatenate(
-                ([-.5], np.arange(n_timestamps))))
-            plt.savefig(os.path.join(IMG_PATH,
-                        "epoch_%d_t_avg_hist.jpg" % (e)))
+            # Find indexes of changed predictions
+            idx_list = np.where(pred != pred_cf)[0]
+            if idx_list.size > 0:
+                idx_list = shuffle(idx_list)
+                idx = idx_list[0]
+                sample = np.squeeze(data[idx])
+                sampleCF = np.squeeze(dataCF[idx])
+                ex_cl = pred[idx]
+                ex_cfcl = pred_cf[idx]
 
-            plt.clf()
-            plt.plot(np.arange(len(sample)), sample, 'b')
-            plt.plot(np.arange(len(sampleCF)), sampleCF, 'r')
-            plt.savefig(os.path.join(
-                IMG_PATH, "epoch_%d_from_cl_%d_2cl_%d.jpg" % (e, ex_cl, ex_cfcl)))
-            # plt.waitforbuttonpress(0) # this will wait for indefinite time
-            # plt.close(fig)
+                # Central time histogram
+                plt.clf()
+                t_avg_all = np.concatenate(t_avg_all, axis=0)
+                plt.hist(t_avg_all.squeeze(), bins=np.concatenate(
+                    ([-.5], np.arange(n_timestamps))))
+                plt.savefig(os.path.join(IMG_PATH,
+                            "epoch_%d_t_avg_hist.jpg" % (e)))
+
+                # Random counterfactual example
+                plt.clf()
+                plt.plot(np.arange(len(sample)), sample, 'b')
+                plt.plot(np.arange(len(sampleCF)), sampleCF, 'r')
+                plt.savefig(os.path.join(
+                    IMG_PATH, "epoch_%d_from_cl_%d_2cl_%d.jpg" % (e, ex_cl, ex_cfcl)))
+                # plt.waitforbuttonpress(0) # this will wait for indefinite time
+                # plt.close(fig)
+
         log.saveWeightsAndParams(noiser, args.noiser_name, args)
 
         sys.stdout.flush()
