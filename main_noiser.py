@@ -176,10 +176,10 @@ def trainModelNoise(
         loss_acc = []
         loss_discr = []
         loss_cl = []
-        loss_reg_tv = []
         loss_generator = []
         loss_uni = []
         t_avg_all = []
+        # loss_reg_tv = []
         # loss_reg_L1 = []
         # loss_reg_L2 = []
         # non_zeros = []  # just to track sparsity
@@ -262,7 +262,7 @@ def trainModelNoise(
             # reg_entro = torch.mean(torch.sum(torch.special.entr(prob_cl), dim=1))
             # Total Variation Regularizer L1
             # reg_tv = torch.mean(torch.sum(torch.abs(torch.squeeze(to_add[:, :, 1:] - to_add[:, :, :-1])), dim=1))
-            # Total Variation Regularizer L2
+            # Sobolev Regularizer (smoothness)
             # reg_tv = torch.mean( torch.sum( torch.square( torch.squeeze(to_add[:,:,1:] - to_add[:,:,:-1]) ),dim=1) )
             # L1 regularizer
             # reg_L1 = torch.mean(torch.sum(torch.abs(torch.squeeze(to_add)), dim=1))
