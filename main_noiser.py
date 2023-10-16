@@ -239,7 +239,7 @@ def trainModelNoise(
             # uni_reg = torch.mean( torch.sum( to_add_abs, dim=1) )
             # uni_reg = torch.mean( torch.sum( torch.abs(diff) * to_add_abs, dim=1) )
             # normalize wrt time dimension
-            t_norm = n_timestamps**4
+            t_norm = n_timestamps**3
             uni_reg = uni_reg / t_norm
 
             # ---- Multimodal Regularizer ----
@@ -344,7 +344,7 @@ def trainModelNoise(
                 # Random counterfactual example
                 plt.clf()
                 plt.plot(np.arange(len(sample)), sample, 'b')
-                plt.plot(np.arange(len(sampleCF)), sampleCF, 'r')
+                plt.plot(np.arange(len(sampleCF)), sampleCF, 'r:')
                 plt.savefig(os.path.join(
                     IMG_PATH, "epoch_%d_from_cl_%d_2cl_%d.jpg" % (e, ex_cl, ex_cfcl)))
                 # plt.waitforbuttonpress(0) # this will wait for indefinite time
