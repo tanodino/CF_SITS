@@ -193,7 +193,7 @@ def load_UCR_dataset(name, split, data_path=None):
     if  split.lower() == 'train' or split.lower() == 'valid':
         splitter = StratifiedShuffleSplit(
             n_splits=1, test_size=0.25, random_state=123)
-        train_idx, valid_idx = splitter.split(X, y)
+        train_idx, valid_idx = next(splitter.split(X, y))
         if split.lower() == 'train':
             return datatuple(X[train_idx], y[train_idx])
         elif split.lower() == 'valid':
