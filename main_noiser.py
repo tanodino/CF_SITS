@@ -374,26 +374,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # set defaults according to shring and loss choices:
-    # XXX to complete later when we set defaults for all 4 scenarios
-    if not args.shrink and args.loss_cl_type == 'log':
+    if args.loss_cl_type == 'log':
         parser.set_defaults(
             reg_gen=0.5,
             reg_uni=691.2)
-    # elif args.shrink and args.loss_cl_type == 'log':
-    #     parser.set_defaults(
-    #         reg_gen=0.0002,
-    #         reg_uni=691.2,
-    # )
-    elif args.shrink and args.loss_cl_type == 'margin':
+    elif args.loss_cl_type == 'margin':
         parser.set_defaults(
-            reg_gen=0.0002,
-            reg_uni=0.28,
+            reg_gen=0.05,
+            reg_uni=1,
             margin=0.1)
-    # elif not args.shrink and args.loss_cl_type == 'margin':
-    #     parser.set_defaults(
-    #         reg_gen=0.0002,
-    #         reg_uni=691.2,
-    #         margin=0.1)
 
     # parse args again so that new defaults are taken into account
     args = parser.parse_args()

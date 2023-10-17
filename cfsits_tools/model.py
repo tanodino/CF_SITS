@@ -385,7 +385,7 @@ class Noiser(nn.Module):
         self.tanh = nn.Tanh()
 
         if self.shrink:
-            self.ST = nn.Softshrink(0.01)
+            self.ST = nn.Softshrink(0.1)
 
         self.unflatten = nn.Unflatten(-1,(n_var,int(out_dim/n_var)))
 
