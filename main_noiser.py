@@ -2,6 +2,7 @@
 import argparse
 import logging
 from pathlib import Path
+from typing import Optional
 import numpy as np
 # import tensorflow as tf
 import torch
@@ -355,7 +356,7 @@ def trainModelNoise(
 
         sys.stdout.flush()
 
-def main(config:None|dict = None):
+def main(config:Optional[dict] = None):
     """ main function of the module
     It was packaged into a function to facilitate using the script for hyperparameter search.
     For this usage, arguments that would be normally given via command-line
@@ -408,7 +409,7 @@ def main(config:None|dict = None):
     utils.setSeed(args.seed)
 
     # Create img dir within log dir if needed
-    IMG_PATH = os.path.join(log.getLogdir(), 'img')
+    IMG_PATH = os.path.join(log.getLogdir(logger), 'img')
     if args.do_plots:
         os.makedirs(IMG_PATH, exist_ok=True)
 
