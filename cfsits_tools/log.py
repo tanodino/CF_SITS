@@ -28,22 +28,28 @@ def numericLogLevel(loglevel:str) -> int:
 def getScriptName(filename):
     return os.path.basename(os.path.splitext(filename)[0])
 
+def _check_parser_or_args(parser, args):
+    if args is None and parser is not None:
+        args = parser.parse_args()
+    elif args is None and parser is None:
+        raise RuntimeError("You must provide at least one of {args, parser}.")
+    return args
 
-def createLogdir(filename, parser):
-    args = parser.parse_args()
+def createLogdir(filename, parser=None, args=None):
+    args = _check_parser_or_args(parser, args)
     script_name = getScriptName(filename)
-    subdir = getSuffixWithParameters(parser) + getParamHashSuffix(args)
+    subdir = getSuffixWithParameters(parser, args) + getParamHashSuffix(args)
     log_dir = os.path.join('logs', script_name, subdir)
     os.makedirs(log_dir, exist_ok=True)
     return log_dir
 
 
-def setupLogger(filename, parser):
+def setupLogger(filename, parser=None, args=None):
     script_name = getScriptName(filename)
-    log_dir = createLogdir(filename, parser)
+    log_dir = createLogdir(filename, parser, args)
     logger = logging.getLogger('__main__')
     # parse args
-    args = parser.parse_args()
+    args = _check_parser_or_args(parser, args)
 
     fname = 'log.txt'
 
@@ -84,8 +90,9 @@ def _removeIgnoreArgs(args) -> dict:
     return args_d
 
 
-def getNonDefaultArgs(parser) -> dict:
-    args = parser.parse_args()
+def getNonDefaultArgs(parser, args=None) -> dict:
+    if args is None:
+        args = parser.parse_args()
     args_d = _removeIgnoreArgs(args)
     # Adapted from https://stackoverflow.com/questions/44542605/python-how-to-get-all-default-values-from-argparse
     # To get all defaults:
@@ -100,8 +107,12 @@ def getNonDefaultArgs(parser) -> dict:
     return non_default_args
 
 
-def getSuffixWithParameters(parser):
-    args = getNonDefaultArgs(parser)
+def getSuffixWithParameters(parser=None, args=None):
+    args = _check_parser_or_args(parser, args)
+    # it is only possible to retrieve default values if parser is passed. 
+    # if not, function provides a suffix based on all params
+    if parser is not None:
+        args = getNonDefaultArgs(parser, args)
     param_list = [f"{key.replace('_','-')}_{val}" for key, val in args.items()]
     param_list.sort()
     # if all params are default, param list is empty

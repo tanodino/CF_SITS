@@ -1,4 +1,5 @@
 # KOUMBIA
+import argparse
 import logging
 from pathlib import Path
 import numpy as np
@@ -354,8 +355,13 @@ def trainModelNoise(
 
         sys.stdout.flush()
 
-
-if __name__ == "__main__":
+def main(config:None|dict = None):
+    """ main function of the module
+    It was packaged into a function to facilitate using the script for hyperparameter search.
+    For this usage, arguments that would be normally given via command-line
+    can be passed via the config dictionary.
+    """
+    global args, logger
     parser = cli.getBasicParser(
         description="This script trains a noiser model for counterfatual example generation, given a particular classifier (clf). It will try to load a clf corresponding to the dataset chosen via command-line parameters, and terminate if no matching clf is found.")
     parser = cli.addClfLoadArguments(parser)
@@ -398,8 +404,16 @@ if __name__ == "__main__":
     # parse args again so that new defaults are taken into account
     args = parser.parse_args()
 
+    # If parameters were passed through config, include them into args
+    if config is not None:
+        args_d = vars(args)
+        args_d.update(config)
+        print(args_d)
+        print(sys.argv)
+        args = argparse.Namespace(**args_d)
+
     # logging set up
-    logger = log.setupLogger(__file__, parser)
+    logger = log.setupLogger(__file__, parser, args)
 
     logger.info(f"Setting manual seed={args.seed} for reproducibility")
     utils.setSeed(args.seed)
@@ -417,3 +431,8 @@ if __name__ == "__main__":
     metrics_dict = computeMetricsPostTraining(model, noiser, x_train, args)
     # Save metrics in json file within the log dir
     log.saveMetrics(metrics_dict)
+
+
+
+if __name__ == "__main__":
+    main()
