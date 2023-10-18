@@ -1,3 +1,4 @@
+from copy import deepcopy
 import hashlib
 import json
 import logging
@@ -35,7 +36,7 @@ def _check_parser_or_args(parser, args):
         raise RuntimeError("You must provide at least one of {args, parser}.")
     return args
 
-def createLogdir(filename, parser=None, args=None):
+def _createLogdir(filename, parser=None, args=None):
     args = _check_parser_or_args(parser, args)
     script_name = getScriptName(filename)
     subdir = getSuffixWithParameters(parser, args) + getParamHashSuffix(args)
@@ -46,7 +47,7 @@ def createLogdir(filename, parser=None, args=None):
 
 def setupLogger(filename, parser=None, args=None):
     script_name = getScriptName(filename)
-    log_dir = createLogdir(filename, parser, args)
+    log_dir = _createLogdir(filename, parser, args)
     logger = logging.getLogger('__main__')
     # parse args
     args = _check_parser_or_args(parser, args)
@@ -76,13 +77,13 @@ def setupLogger(filename, parser=None, args=None):
     logger.info(f'Logging to {log_dir}')
     return logger
 
-def getLogdir() -> str :
+def getLogdir(logger) -> str :
     log_dir, log_file = os.path.split(logger.handlers[0].baseFilename)
     return log_dir
 
 
 def _removeIgnoreArgs(args) -> dict:
-    args_d = vars(args)
+    args_d = deepcopy(vars(args))
     # Remove args to ignore
     for key in IGNORE_ARGS:
         if key in args_d:
