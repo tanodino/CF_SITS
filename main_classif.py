@@ -7,10 +7,8 @@ import sys
 
 from cfsits_tools import utils, cli
 from cfsits_tools import log
-from cfsits_tools.log import saveCopyWithParams, setupLogger
 from cfsits_tools.model import Inception, S2Classif, MLPClassif
-from cfsits_tools.data import DEFAULT_DATA_DIR, load_UCR_dataset, loadSplitNpy, extractNDVI, npyData2DataLoader
-from cfsits_tools.utils import evaluate, getCurrentDevice, saveWeights
+from cfsits_tools.data import DEFAULT_DATA_DIR, load_UCR_dataset, loadSplitNpy, npyData2DataLoader
 
 
 MODEL_DIR = utils.DEFAULT_MODEL_DIR
