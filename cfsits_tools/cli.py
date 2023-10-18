@@ -1,10 +1,12 @@
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from typing import Optional
 
 from cfsits_tools.data import VALID_SPLITS, list_UCR_datasets
 from cfsits_tools.log import numericLogLevel
 
 
-def getBasicParser(description:str|None=None):
+
+def getBasicParser(description: Optional[str] = None):
     parser = ArgumentParser(description=description,
         formatter_class=ArgumentDefaultsHelpFormatter)
     parser.add_argument(
