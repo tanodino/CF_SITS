@@ -421,6 +421,8 @@ def main(config:Optional[dict] = None):
     metrics_dict = computeMetricsPostTraining(model, noiser, x_train, args)
     # Save metrics in json file within the log dir
     log.saveMetrics(metrics_dict)
+    
+    return metrics_dict
 
 
 
