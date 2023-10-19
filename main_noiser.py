@@ -206,9 +206,12 @@ def trainModelNoise(
                 loss_classif = torch.mean(-torch.log(1. -
                                           prob + torch.finfo(torch.float32).eps))
             else:  # margin loss
-                max_other = torch.max(prob_cl * (1-y_ohe))
+                max_other = torch.max(prob_cl * (1-y_ohe),dim=1)[0]
+                target_prob = torch.maximum(max_other-args.margin,torch.tensor(0))
                 loss_classif = torch.mean(-torch.log(1. - torch.maximum(
-                    prob + args.margin - max_other, torch.tensor(0)) + torch.finfo(torch.float32).eps))
+                    prob - target_prob, torch.tensor(0)) + torch.finfo(torch.float32).eps))
+                # loss_classif = torch.mean(-torch.log(1. + args.margin - max_other - torch.maximum(
+                #     prob + args.margin - max_other, torch.tensor(0)) + torch.finfo(torch.float32).eps))
 
             # ---- Unimodal Regularizer ----
             # Compute central time
@@ -380,8 +383,8 @@ if __name__ == "__main__":
             reg_uni=691.2)
     elif args.loss_cl_type == 'margin':
         parser.set_defaults(
-            reg_gen=0.05,
-            reg_uni=1,
+            reg_gen=1,
+            reg_uni=5,
             margin=0.1)
 
     # parse args again so that new defaults are taken into account
