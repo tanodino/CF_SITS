@@ -221,61 +221,43 @@ class Inception(nn.Module):
 
 
 class S2Branch(nn.Module):
-    def __init__(self, dropout_rate = 0.0, hidden_activation='relu',
+    def __init__(self, dropout_rate = 0.0, n_channels=64, hidden_activation='relu',
                  output_activation='softmax',
                  name='S2Branch',
                  **kwargs):
         super(S2Branch, self).__init__(**kwargs)
-        self.conv1 = nn.LazyConv1d(64,5,padding=1)
-        self.bn1 = nn.BatchNorm1d(64)
-        self.relu1 = nn.ReLU()
-        self.dp1 = nn.Dropout(dropout_rate)
 
-        self.conv2 = nn.LazyConv1d(64,5,padding=1)
-        self.bn2 = nn.BatchNorm1d(64)
-        self.relu2 = nn.ReLU()
-        self.dp2 = nn.Dropout(dropout_rate)
+        kernel_size = 5
+        padding = 1
+        self.convblock1 = ConvBlock(n_channels,kernel_size,padding,dropout_rate)
+        self.convblock2 = ConvBlock(n_channels,kernel_size,padding,dropout_rate)
+        self.convblock3 = ConvBlock(n_channels,kernel_size,padding,dropout_rate)
 
-        self.conv3 = nn.LazyConv1d(64,5,padding=1)
-        self.bn3 = nn.BatchNorm1d(64)
-        self.relu3 = nn.ReLU()
-        self.dp3 = nn.Dropout(dropout_rate)
-        self.flatten = nn.Flatten()
-        
+        # self.flatten = nn.Flatten()
         self.gap = nn.AdaptiveAvgPool1d(1)
-        '''
-        self.dense = nn.lazyLinear(256)
-        self.bn4 = nn.BatchNorm1d(256)
-        self.relu4 = nn.ReLU()
-        self.dp4 = nn.Dropout(dropout_rate)
         
-        self.classif = nn.lazyLinear(n_class)
-        self.softmax = nn.Softmax(dim=1)
-        '''
-        
-
     def forward(self, inputs):
-        output1 = self.conv1(inputs)
-        output1 = self.bn1(output1)
-        output1 = self.relu1(output1)
-        output1 = self.dp1(output1)
-        
-        output2 = self.conv2(output1)
-        output2 = self.bn2(output2)
-        output2 = self.relu2(output2)
-        output2 = self.dp2(output2)
-
-        output3 = self.conv3(output2)
-        output3 = self.bn3(output3)
-        output3 = self.relu3(output3)
-        output3 = self.dp3(output3)
-
+        output1 = self.convblock1(inputs)
+        output2 = self.convblock2(output1)
+        output3 = self.convblock2(output2)
         output = self.gap(output3)
-        #output = self.flatten(output3)
-        #return output
+        #return self.flatten(output3)
         return torch.squeeze(output, dim=-1)
 
 
+class ConvBlock(nn.Module):
+    def __init__(self, out_channels=64, kernel_size=5, padding=1, dropout_rate=0):
+        super(ConvBlock, self).__init__()
+        self.conv = nn.LazyConv1d(out_channels,kernel_size,padding=padding)
+        self.bn = nn.BatchNorm1d(out_channels)
+        self.relu = nn.ReLU()
+        self.dp = nn.Dropout(dropout_rate)
+
+    def forward(self, inputs):
+        output1 = self.conv(inputs)
+        output1 = self.bn(output1)
+        output1 = self.relu(output1)
+        return self.dp(output1)
 
 
 class BinaryClassif(nn.Module):
@@ -303,6 +285,7 @@ class Discr(nn.Module):
     def __init__(self,
                  dropout_rate=0.0,
                  encoder='Inception',
+                 input_dim = None,
                  encoder_params=None,
                  hidden_activation='relu',
                  output_activation='softmax',
@@ -312,10 +295,16 @@ class Discr(nn.Module):
         if encoder == 'TempCNN':
             encoder_class = S2Branch
             if encoder_params is None:
-                encoder_params = dict(dropout_rate=dropout_rate)
+                n_channels = 64 if input_dim is None else int(64*input_dim/24)
+                encoder_params = dict(dropout_rate=dropout_rate, n_channels=n_channels)
         elif encoder == 'Inception':
             encoder_class = InceptionBranch
             encoder_params = encoder_params or dict()
+        elif encoder == 'MLP':
+            encoder_class = MLPBranch
+            if encoder_params is None:
+                n_units = 128 if input_dim is None else int(128*input_dim/24)
+                encoder_params = dict(dropout_rate=dropout_rate, n_units=n_units)
         self.encoder = encoder_class(**encoder_params)
 
 
@@ -360,25 +349,14 @@ class Noiser(nn.Module):
                  **kwargs):
         super(Noiser, self).__init__(**kwargs)
         self.shrink = shrink
-        hidden_dim = 128*n_var
+        hidden_dim = int(128*n_var*out_dim/24) #128*n_var
         # for now only MLP arch is supported
         self.body=MLPBranch(
             dropout_rate=dropout_rate, 
             n_units=hidden_dim,
             hidden_activation=hidden_activation,
             batch_norm=True)
-        # This part is now done within MLPBranch
-        # self.flatten = nn.Flatten()
-        # self.dense1 = nn.LazyLinear(hidden_dim)
-        # self.bn1 = nn.BatchNorm1d(hidden_dim)
-        # #self.tanh1 = nn.Tanh()#nn.ReLU()
-        # self.activ1 = nn.ReLU()
-        # self.dp1 = nn.Dropout(dropout_rate)
-
-        # self.dense2 = nn.LazyLinear(hidden_dim)
-        # self.bn2 = nn.BatchNorm1d(hidden_dim)
-        # #self.tanh2 = nn.Tanh()#nn.ReLU()
-        # self.activ2 = nn.ReLU()
+        
         self.dp2 = nn.Dropout(dropout_rate)
 
         self.dense3 = nn.LazyLinear(out_dim)
@@ -391,17 +369,7 @@ class Noiser(nn.Module):
 
     def forward(self, inputs):
         output = self.body(inputs)
-        # This part is now done within MLPBranch
-        # output = self.flatten(inputs)
-        
-        # output = self.dense1(output)
-        # output = self.bn1(output)
-        # output = self.activ1(output)
-        # output = self.dp1(output)
-        
-        # output = self.dense2(output)
-        # output = self.bn2(output)
-        # output = self.activ2(output)
+
         output = self.dp2(output)
         
         output = self.dense3(output)

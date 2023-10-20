@@ -69,7 +69,7 @@ def launchTraining(args):
         base_arch=args.noiser_arch)
 
     # Discriminator model
-    discr = Discr(args.dropout_discr, encoder=args.discr_arch)
+    discr = Discr(args.dropout_discr, encoder=args.discr_arch, input_dim=n_timestamps)
 
     # device setup
     utils.setFreeDevice()
@@ -339,8 +339,11 @@ def trainModelNoise(
                 # Central time histogram
                 plt.clf()
                 t_avg_all = np.concatenate(t_avg_all, axis=0)
-                plt.hist(t_avg_all.squeeze(), bins=np.concatenate(
-                    ([-.5], np.arange(n_timestamps))))
+                if n_timestamps<100:
+                    plt.hist(t_avg_all.squeeze(), bins=np.concatenate(
+                        ([-.5], np.arange(n_timestamps))))
+                else:
+                    plt.hist(t_avg_all.squeeze(), range=(0,n_timestamps))
                 plt.savefig(os.path.join(IMG_PATH,
                             "epoch_%d_t_avg_hist.jpg" % (e)))
 
