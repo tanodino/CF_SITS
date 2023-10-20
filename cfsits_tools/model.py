@@ -343,13 +343,14 @@ class Discr(nn.Module):
 class Noiser(nn.Module):
     def __init__(self,
                  out_dim, 
+                 input_dim = None,
                  dropout_rate = 0.0, n_var=1, 
                  hidden_activation='relu', output_activation=None,
                  name='Noiser', shrink=False, base_arch='MLP',
                  **kwargs):
         super(Noiser, self).__init__(**kwargs)
         self.shrink = shrink
-        hidden_dim = int(128*n_var*out_dim/24) #128*n_var
+        hidden_dim = 128*n_var if input_dim is None else int(128*n_var*out_dim/24)
         # for now only MLP arch is supported
         self.body=MLPBranch(
             dropout_rate=dropout_rate, 

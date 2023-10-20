@@ -64,6 +64,7 @@ def launchTraining(args):
     # noiser model
     noiser = Noiser(
         out_dim=n_timestamps,
+        input_dim=n_timestamps,
         dropout_rate=args.dropout_noiser,
         shrink=args.shrink,
         base_arch=args.noiser_arch)
