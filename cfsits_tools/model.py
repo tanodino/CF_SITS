@@ -229,35 +229,70 @@ class S2Branch(nn.Module):
 
         kernel_size = 5
         padding = 1
-        self.convblock1 = ConvBlock(n_channels,kernel_size,padding,dropout_rate)
-        self.convblock2 = ConvBlock(n_channels,kernel_size,padding,dropout_rate)
-        self.convblock3 = ConvBlock(n_channels,kernel_size,padding,dropout_rate)
+        self.conv1 = nn.LazyConv1d(64,kernel_size,padding=padding)
+        self.bn1 = nn.BatchNorm1d(64)
+        self.relu1 = nn.ReLU()
+        self.dp1 = nn.Dropout(dropout_rate)
+
+        self.conv2 = nn.LazyConv1d(64,kernel_size,padding=padding)
+        self.bn2 = nn.BatchNorm1d(64)
+        self.relu2 = nn.ReLU()
+        self.dp2 = nn.Dropout(dropout_rate)
+
+        self.conv3 = nn.LazyConv1d(64,kernel_size,padding=padding)
+        self.bn3 = nn.BatchNorm1d(64)
+        self.relu3 = nn.ReLU()
+        self.dp3 = nn.Dropout(dropout_rate)
+        self.flatten = nn.Flatten()
+
+        self.gap = nn.AdaptiveAvgPool1d(1)
+
+        # self.convblock1 = ConvBlock(n_channels,kernel_size,padding,dropout_rate)
+        # self.convblock2 = ConvBlock(n_channels,kernel_size,padding,dropout_rate)
+        # self.convblock3 = ConvBlock(n_channels,kernel_size,padding,dropout_rate)
 
         # self.flatten = nn.Flatten()
         self.gap = nn.AdaptiveAvgPool1d(1)
         
     def forward(self, inputs):
-        output1 = self.convblock1(inputs)
-        output2 = self.convblock2(output1)
-        output3 = self.convblock2(output2)
+
+        output1 = self.conv1(inputs)
+        output1 = self.bn1(output1)
+        output1 = self.relu1(output1)
+        output1 = self.dp1(output1)
+
+        output2 = self.conv2(output1)
+        output2 = self.bn2(output2)
+        output2 = self.relu2(output2)
+        output2 = self.dp2(output2)
+
+        output3 = self.conv3(output2)
+        output3 = self.bn3(output3)
+        output3 = self.relu3(output3)
+        output3 = self.dp3(output3)
+
+        # output1 = self.convblock1(inputs)
+        # output2 = self.convblock2(output1)
+        # output3 = self.convblock2(output2)
+
         output = self.gap(output3)
         #return self.flatten(output3)
         return torch.squeeze(output, dim=-1)
 
 
-class ConvBlock(nn.Module):
-    def __init__(self, out_channels=64, kernel_size=5, padding=1, dropout_rate=0):
-        super(ConvBlock, self).__init__()
-        self.conv = nn.LazyConv1d(out_channels,kernel_size,padding=padding)
-        self.bn = nn.BatchNorm1d(out_channels)
-        self.relu = nn.ReLU()
-        self.dp = nn.Dropout(dropout_rate)
+# class ConvBlock(nn.Module):
+#     def __init__(self, out_channels=64, kernel_size=5, padding=1, dropout_rate=0):
+#         super(ConvBlock, self).__init__()
+#         self.conv = nn.LazyConv1d(out_channels,kernel_size,padding=padding)
+#         self.bn = nn.BatchNorm1d(out_channels)
+#         self.relu = nn.ReLU()
+#         self.dp = nn.Dropout(dropout_rate)
 
-    def forward(self, inputs):
-        output1 = self.conv(inputs)
-        output1 = self.bn(output1)
-        output1 = self.relu(output1)
-        return self.dp(output1)
+#     def forward(self, inputs):
+#         output1 = self.conv(inputs)
+#         output1 = self.bn(output1)
+#         output1 = self.relu(output1)
+#         return self.dp(output1)
 
 
 class BinaryClassif(nn.Module):
