@@ -84,8 +84,8 @@ def launchInference(args):
 
 
     # setup dataloaders
-    train_dataloader = npyData2DataLoader(x_train, batch_size=2048)
-    dataloader_y_true = npyData2DataLoader(X, y_true, batch_size=2048)
+    train_dataloader = npyData2DataLoader(x_train, batch_size=256)
+    dataloader_y_true = npyData2DataLoader(X, y_true, batch_size=256)
 
     # compute CF data of the chosen split
     y_pred, y_predCF, dataCF, noiseCF = utils.predictionAndCF(

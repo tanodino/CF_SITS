@@ -35,7 +35,7 @@ def validity(X, Xcf, model):
     y_pred = []
     for data in [X, Xcf]:
         dataloader = npyData2DataLoader(
-            data[:, np.newaxis, :], batch_size=2048)
+            data[:, np.newaxis, :], batch_size=256)
         y_pred.append(ClfPrediction(model, dataloader))
     return validity_from_pred(*tuple(y_pred))
 

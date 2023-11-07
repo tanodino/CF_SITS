@@ -66,12 +66,13 @@ def launchTraining(args):
     # noiser model
     noiser = Noiser(
         out_dim=n_timestamps,
+        input_dim=n_timestamps,
         dropout_rate=args.dropout_noiser,
         shrink=args.shrink,
         base_arch=args.noiser_arch)
 
     # Discriminator model
-    discr = Discr(args.dropout_discr, encoder=args.discr_arch)
+    discr = Discr(args.dropout_discr, encoder=args.discr_arch, input_dim=n_timestamps)
 
     # device setup
     utils.setFreeDevice()
@@ -208,9 +209,12 @@ def trainModelNoise(
                 loss_classif = torch.mean(-torch.log(1. -
                                           prob + torch.finfo(torch.float32).eps))
             else:  # margin loss
-                max_other = torch.max(prob_cl * (1-y_ohe))
+                max_other = torch.max(prob_cl * (1-y_ohe),dim=1)[0]
+                target_prob = torch.maximum(max_other-args.margin,torch.tensor(0))
                 loss_classif = torch.mean(-torch.log(1. - torch.maximum(
-                    prob + args.margin - max_other, torch.tensor(0)) + torch.finfo(torch.float32).eps))
+                    prob - target_prob, torch.tensor(0)) + torch.finfo(torch.float32).eps))
+                # loss_classif = torch.mean(-torch.log(1. + args.margin - max_other - torch.maximum(
+                #     prob + args.margin - max_other, torch.tensor(0)) + torch.finfo(torch.float32).eps))
 
             # ---- Unimodal Regularizer ----
             # Compute central time
@@ -338,8 +342,11 @@ def trainModelNoise(
                 # Central time histogram
                 plt.clf()
                 t_avg_all = np.concatenate(t_avg_all, axis=0)
-                plt.hist(t_avg_all.squeeze(), bins=np.concatenate(
-                    ([-.5], np.arange(n_timestamps))))
+                if n_timestamps<100:
+                    plt.hist(t_avg_all.squeeze(), bins=np.concatenate(
+                        ([-.5], np.arange(n_timestamps))))
+                else:
+                    plt.hist(t_avg_all.squeeze(), range=(0,n_timestamps))
                 plt.savefig(os.path.join(IMG_PATH,
                             "epoch_%d_t_avg_hist.jpg" % (e)))
 
@@ -387,8 +394,8 @@ def main(config:Optional[dict] = None):
             reg_uni=691.2)
     elif args.loss_cl_type == 'margin':
         parser.set_defaults(
-            reg_gen=0.05,
-            reg_uni=1,
+            reg_gen=1,
+            reg_uni=5,
             margin=0.1)
 
     # parse args again so that new defaults are taken into account
