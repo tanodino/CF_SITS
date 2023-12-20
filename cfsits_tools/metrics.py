@@ -19,6 +19,8 @@ import numpy as np
 import logging
 from sklearn.base import BaseEstimator
 from sklearn.ensemble import IsolationForest
+from sklearn.svm import OneClassSVM
+from sklearn.linear_model import SGDOneClassSVM
 from sklearn.neighbors import NearestNeighbors
 from sklearn.metrics import accuracy_score, confusion_matrix, normalized_mutual_info_score, precision_score, recall_score
 from cfsits_tools.data import npyData2DataLoader
@@ -191,12 +193,20 @@ def metricsReport(X, Xcf, y_pred=None, y_pred_cf=None, ifX=None,
         metrics_dict[f'rel_proximity_L{order}'] = rel_prox_avg
         logger.info(f"avg rel proximity @ norm-{order}: {rel_prox_avg:0.4f}")
 
-    # Plausibility
+    # Plausibility (IsolationForest)
     outlier_estimator = IsolationForest(n_estimators=300).fit(ifX)
     plausibility_avg = np.mean(plausibility(
         X, Xcf, estimator=outlier_estimator))
-    metrics_dict[f'plausibility'] = plausibility_avg
-    logger.info(f"avg plausibility: {plausibility_avg:0.4f}")
+    metrics_dict[f'plausibility_IF'] = plausibility_avg
+    logger.info(f"avg plausibility (IF): {plausibility_avg:0.4f}")
+
+    # Plausibility (OneClassSVM)
+    # outlier_estimator = SGDOneClassSVM(random_state=42).fit(ifX) #Faster but less accurate
+    outlier_estimator = OneClassSVM(gamma='auto').fit(ifX)
+    plausibility_avg = np.mean(plausibility(
+        X, Xcf, estimator=outlier_estimator))
+    metrics_dict[f'plausibility_1cSVM'] = plausibility_avg
+    logger.info(f"avg plausibility (1c-SVM): {plausibility_avg:0.4f}")
 
     # Validity
     if model is None and y_pred is not None:
