@@ -110,63 +110,10 @@ class InceptionLayer(nn.Module):
         return output
 
 
-class InceptionBranch(nn.Module):
-    # PyTorch translation of the Keras code in https://github.com/hfawaz/dl-4-tsc
-    def __init__(self, nb_filters=32, use_residual=True,
-                 use_bottleneck=True, bottleneck_size=32, depth=6, kernel_size=41):
-        super(InceptionBranch, self).__init__()
-
-        self.use_residual = use_residual
-
-        # Inception layers
-        self.inception_list = nn.ModuleList(
-            [InceptionLayer(nb_filters,use_bottleneck, bottleneck_size, kernel_size) for _ in range(depth)])
-        # Explicit input sizes (i.e. without using Lazy layers). Requires n_var passed as a constructor input
-        # self.inception_list = nn.ModuleList([InceptionLayer(n_var, nb_filters,use_bottleneck, bottleneck_size, kernel_size) for _ in range(depth)])
-        # for _ in range(1,depth):
-        #     inception = InceptionLayer(4*nb_filters,nb_filters,use_bottleneck, bottleneck_size, kernel_size)
-        #     self.inception_list.append(inception)
-
-        # Fully-connected layer
-        self.gap = nn.AdaptiveAvgPool1d(1)
-        self.out = nn.Flatten()
-
-        # Shortcut layers
-        # First residual layer has n_var channels as inputs while the remaining have 4*nb_filters
-        self.conv = nn.ModuleList([
-            nn.LazyConv1d(4*nb_filters, kernel_size=1,
-                            stride=1, padding="same", bias=False)
-            for _ in range(int(depth/3))
-        ])
-        self.bn = nn.ModuleList([nn.BatchNorm1d(4*nb_filters) for _ in range(int(depth/3))])
-        self.relu = nn.ModuleList([nn.ReLU() for _ in range(int(depth/3))])
-
-    def _shortcut_layer(self, input_tensor, out_tensor, id):
-        shortcut_y = self.conv[id](input_tensor)
-        shortcut_y = self.bn[id](shortcut_y)
-        x = torch.add(shortcut_y, out_tensor)
-        x = self.relu[id](x)
-        return x
-
-    def forward(self, x):
-        input_res = x
-
-        for d, inception in enumerate(self.inception_list):
-            x = inception(x)
-
-            # Residual layer
-            if self.use_residual and d % 3 == 2:
-                x = self._shortcut_layer(input_res,x, int(d/3))
-                input_res = x
-
-        gap_layer = self.gap(x)
-        return self.out(gap_layer)
-
-
 class Inception(nn.Module):
     # PyTorch translation of the Keras code in https://github.com/hfawaz/dl-4-tsc
-    def __init__(self, nb_classes, nb_filters=32, use_residual=True,
-                 use_bottleneck=True, bottleneck_size=32, depth=6, kernel_size=41):
+    def __init__(self, nb_classes=2, nb_filters=32, use_residual=True,
+                 use_bottleneck=True, bottleneck_size=32, depth=6, kernel_size=40,classif=True, gap="temp"):
         super(Inception, self).__init__()
 
         self.use_residual = use_residual
@@ -182,12 +129,19 @@ class Inception(nn.Module):
 
         # Fully-connected layer
         self.gap = nn.AdaptiveAvgPool1d(1)
-        self.fc = nn.Sequential(
-            nn.Flatten(),
-            nn.LazyLinear(nb_classes),
-            # nn.Softmax(dim=1) # already performed inside CrossEntropyLoss
-        )
+        if gap == 'temp': # GAP on temporal dimension
+            self.gap = nn.AdaptiveAvgPool1d(1)
+        else: # GAP on channel dimension
+            self.gap = nn.LazyConv1d(1,kernel_size=1,padding="same")
 
+        if classif:
+            self.fc = nn.Sequential(
+                nn.Flatten(),
+                nn.LazyLinear(nb_classes),
+                # nn.Softmax(dim=1) # already performed inside CrossEntropyLoss
+            )
+        else: # return just the feature vector
+            self.fc = nn.Identity()
         # Shortcut layers
         # First residual layer has n_var channels as inputs while the remaining have 4*nb_filters
         self.conv = nn.ModuleList([
@@ -220,15 +174,73 @@ class Inception(nn.Module):
         return self.fc(gap_layer)
 
 
+class InceptionGen(nn.Module):
+    # PyTorch translation of the Keras code in https://github.com/hfawaz/dl-4-tsc
+    def __init__(self, nb_filters=32, use_residual=True,
+                 use_bottleneck=True, bottleneck_size=32, depth=6, kernel_size=40):
+        super(InceptionGen, self).__init__()
+
+        self.use_residual = use_residual
+
+        # Inception layers
+        self.inception_list = nn.ModuleList(
+            [InceptionLayer(nb_filters,use_bottleneck, bottleneck_size, kernel_size) for _ in range(depth)])
+        # Explicit input sizes (i.e. without using Lazy layers). Requires n_var passed as a constructor input
+        # self.inception_list = nn.ModuleList([InceptionLayer(n_var, nb_filters,use_bottleneck, bottleneck_size, kernel_size) for _ in range(depth)])
+        # for _ in range(1,depth):
+        #     inception = InceptionLayer(4*nb_filters,nb_filters,use_bottleneck, bottleneck_size, kernel_size)
+        #     self.inception_list.append(inception)
+
+        # Fully-connected layer
+        # self.gap = nn.AdaptiveAvgPool1d(1)
+        self.gap = nn.LazyConv1d(1,1,padding='same')
+
+        # nb_classes = 1
+        # self.fc = nn.Sequential(
+        #     nn.Flatten(),
+        #     nn.LazyLinear(nb_classes),
+        #     # nn.Softmax(dim=1) # already performed inside CrossEntropyLoss
+        # )
+
+        # Shortcut layers
+        # First residual layer has n_var channels as inputs while the remaining have 4*nb_filters
+        self.conv = nn.ModuleList([
+            nn.LazyConv1d(4*nb_filters, kernel_size=1,
+                            stride=1, padding="same", bias=False)
+            for _ in range(int(depth/3))
+        ])
+        self.bn = nn.ModuleList([nn.BatchNorm1d(4*nb_filters) for _ in range(int(depth/3))])
+        self.relu = nn.ModuleList([nn.ReLU() for _ in range(int(depth/3))])
+
+    def _shortcut_layer(self, input_tensor, out_tensor, id):
+        shortcut_y = self.conv[id](input_tensor)
+        shortcut_y = self.bn[id](shortcut_y)
+        x = torch.add(shortcut_y, out_tensor)
+        x = self.relu[id](x)
+        return x
+
+    def forward(self, x):
+        input_res = x
+
+        for d, inception in enumerate(self.inception_list):
+            x = inception(x)
+
+            # Residual layer
+            if self.use_residual and d % 3 == 2:
+                x = self._shortcut_layer(input_res,x, int(d/3))
+                input_res = x
+
+        gap_layer = self.gap(x)
+        return gap_layer
+
+
 class S2Branch(nn.Module):
     def __init__(self, dropout_rate = 0.0, n_channels=64, hidden_activation='relu',
-                 output_activation='softmax',
+                 output_activation='softmax', kernel_size = 5, padding=1, gap='temp',
                  name='S2Branch',
                  **kwargs):
         super(S2Branch, self).__init__(**kwargs)
-
-        kernel_size = 5
-        padding = 1
+        
         self.conv1 = nn.LazyConv1d(64,kernel_size,padding=padding)
         self.bn1 = nn.BatchNorm1d(64)
         self.relu1 = nn.ReLU()
@@ -245,14 +257,15 @@ class S2Branch(nn.Module):
         self.dp3 = nn.Dropout(dropout_rate)
         self.flatten = nn.Flatten()
 
-        self.gap = nn.AdaptiveAvgPool1d(1)
-
         # self.convblock1 = ConvBlock(n_channels,kernel_size,padding,dropout_rate)
         # self.convblock2 = ConvBlock(n_channels,kernel_size,padding,dropout_rate)
         # self.convblock3 = ConvBlock(n_channels,kernel_size,padding,dropout_rate)
 
         # self.flatten = nn.Flatten()
-        self.gap = nn.AdaptiveAvgPool1d(1)
+        if gap == 'temp': # GAP on temporal dimension
+            self.gap = nn.AdaptiveAvgPool1d(1)
+        else: # GAP on channel dimension
+            self.gap = nn.LazyConv1d(1,kernel_size,padding=padding)
         
     def forward(self, inputs):
 
@@ -331,22 +344,31 @@ class Discr(nn.Module):
             encoder_class = S2Branch
             if encoder_params is None:
                 n_channels = 64 if input_dim is None else int(64*input_dim/24)
-                encoder_params = dict(dropout_rate=dropout_rate, n_channels=n_channels)
+                # encoder_params = dict(dropout_rate=dropout_rate, n_channels=n_channels)
+                kernel_size = 5 if input_dim is None else input_dim//8
+                padding = (kernel_size-1)//2
+                encoder_params = dict(dropout_rate=dropout_rate, n_channels=n_channels,kernel_size=kernel_size,padding=padding)
         elif encoder == 'Inception':
-            encoder_class = InceptionBranch
-            encoder_params = encoder_params or dict()
+            encoder_class = Inception
+            encoder_params = encoder_params or dict(classif=False)
         elif encoder == 'MLP':
             encoder_class = MLPBranch
             if encoder_params is None:
                 n_units = 128 if input_dim is None else int(128*input_dim/24)
                 encoder_params = dict(dropout_rate=dropout_rate, n_units=n_units)
-        self.encoder = encoder_class(**encoder_params)
+        elif encoder == 'Conv':            
+            encoder_class = ConvEnc
+            kernel_size = 12 if input_dim is None else input_dim//8
+            encoder_params = dict(num_channels=1, stride=2, kernel_size=kernel_size, nonlinearity='relu') # , verbose=True
 
+        self.encoder = encoder_class(**encoder_params)
+        self.flatten = nn.Flatten() # Necessary for the ConvEnc only. Others are done inside encoder
 
         self.HeadBCl = BinaryClassif(dropout_rate=dropout_rate)
 
     def forward(self, inputs):
         output = self.encoder(inputs)
+        output = self.flatten(output)
         return self.HeadBCl(output)
 
 
@@ -377,7 +399,7 @@ class Discr(nn.Module):
 
 class Noiser(nn.Module):
     def __init__(self,
-                 out_dim, 
+                 out_dim,
                  input_dim = None,
                  dropout_rate = 0.0, n_var=1, 
                  hidden_activation='relu', output_activation=None,
@@ -385,35 +407,62 @@ class Noiser(nn.Module):
                  **kwargs):
         super(Noiser, self).__init__(**kwargs)
         self.shrink = shrink
-        hidden_dim = 128*n_var if input_dim is None else int(128*n_var*out_dim/24)
-        # for now only MLP arch is supported
-        self.body=MLPBranch(
-            dropout_rate=dropout_rate, 
-            n_units=hidden_dim,
-            hidden_activation=hidden_activation,
-            batch_norm=True)
-        
-        self.dp2 = nn.Dropout(dropout_rate)
 
-        self.dense3 = nn.LazyLinear(out_dim)
-        self.tanh = nn.Tanh()
+        if base_arch == 'MLP':
+            hidden_dim = 128*n_var if input_dim is None else int(128*n_var*out_dim/24)
+            self.body=MLPBranch(
+                dropout_rate=dropout_rate, 
+                n_units=hidden_dim,
+                hidden_activation=hidden_activation,
+                batch_norm=True)
+            self.dp2 = nn.Dropout(dropout_rate)
+            self.dense3 = nn.LazyLinear(out_dim)
+            self.tanh = nn.Tanh() #if self.output_activation is not None else nn.Identity()
+            self.unflatten = nn.Unflatten(-1,(n_var,int(out_dim/n_var)))
+
+            self.noiser = nn.Sequential(self.body, self.dp2, self.dense3, self.tanh, self.unflatten)
+
+        elif base_arch == 'TempCNN':
+            n_channels = 64 if input_dim is None else int(64*input_dim/24)
+            kernel_size = 5 if input_dim is None else input_dim//8
+            padding = 2 if input_dim is None else (kernel_size-1)//2
+            self.noiser = nn.Sequential(
+                S2Branch(dropout_rate, n_channels=n_channels, kernel_size=kernel_size, padding=padding, gap='channel'),
+                nn.Dropout(dropout_rate),
+                nn.LazyLinear(out_dim),
+                nn.Tanh(),                             
+                # nn.Unflatten(-1,(n_var,int(out_dim/n_var)))                
+                )
+        
+        elif base_arch == 'Inception':
+            self.noiser = nn.Sequential(
+                Inception(classif=False, gap="channel"),
+                nn.Tanh(),
+                # nn.Unflatten(-1,(n_var,int(out_dim/n_var)))                
+                )
+
+        elif base_arch == 'Conv':
+            # kernel_size = out_dim//8
+            kernel_size = 12
+            self.noiser = nn.Sequential(
+                ConvEnc(num_channels=1, stride=2, kernel_size=kernel_size), #,verbose=True
+                # nn.LazyLinear(out_dim),
+                ConvDec(out_dim, num_channels=1, stride=2, kernel_size=kernel_size), #,verbose=True
+                # nn.Dropout(dropout_rate),
+                # nn.LazyLinear(out_dim),
+                # nn.Tanh(),
+                # nn.Unflatten(-1,(n_var,int(out_dim/n_var)))
+                )
 
         if self.shrink:
             self.ST = nn.Softshrink(0.1)
 
-        self.unflatten = nn.Unflatten(-1,(n_var,int(out_dim/n_var)))
 
     def forward(self, inputs):
-        output = self.body(inputs)
-
-        output = self.dp2(output)
-        
-        output = self.dense3(output)
-        #if self.output_activation is not None:
-        output = self.tanh(output)
+        output = self.noiser(inputs)
         if self.shrink:
             output = self.ST(output)
-        return self.unflatten(output)
+        return output
 
 
 class MLPBranch(nn.Module):
@@ -612,3 +661,156 @@ class S2Classif(nn.Module):
     def forward(self, inputs):
         output = self.encoder(inputs)
         return self.HeadCl(output)
+
+
+class ConvDec(nn.Module):
+    def __init__(self, out_dim, num_channels=1, stride=2, kernel_size=5, verbose=False):
+        super(ConvDec, self).__init__()
+        # Based on WaveGAN generator, with only 3 upsampling layers (instead of 5), without first linear layer 
+        # and using the ConvTranspove1d option instead of Upsample+ConstantPad1d+Conv1d
+        self.verbose = verbose
+
+        # reflection_pad = (kernel_size-stride) // 2
+        pad1 = ((kernel_size-1)//2, kernel_size-1 -(kernel_size-1)//2 + (out_dim//4)%2)
+        pad2 = ((kernel_size-1)//2, kernel_size-1 -(kernel_size-1)//2 + (out_dim//2)%2)
+        pad3 = ((kernel_size-1)//2, kernel_size-1 -(kernel_size-1)//2 + (out_dim)%2)
+        mult=8
+        self.deconv1 = nn.Sequential(
+            nn.Upsample(scale_factor=stride),
+            nn.ConstantPad1d(pad1, value=0),
+            nn.Conv1d(8*mult*num_channels, 4*mult*num_channels, kernel_size, stride=1) #,padding='same'
+        )
+        self.deconv2 = nn.Sequential(
+            nn.Upsample(scale_factor=stride),
+            nn.ConstantPad1d(pad2, value=0),
+            nn.Conv1d(4*mult*num_channels, 2*mult*num_channels, kernel_size, stride=1) #,padding='same'
+        )
+        self.deconv3 = nn.Sequential(
+            nn.Upsample(scale_factor=stride),
+            nn.ConstantPad1d(pad3, value=0),
+            nn.Conv1d(2*mult*num_channels, num_channels, kernel_size, stride=1) # ,padding='same'
+        ) 
+
+
+        # padding = (kernel_size-stride)//2
+        # mult=8
+        # self.deconv1 = nn.ConvTranspose1d(8*mult*num_channels, 4*mult*num_channels, kernel_size, stride, padding, output_padding=(out_dim//4)%2)
+        # self.deconv2 = nn.ConvTranspose1d(4*mult*num_channels, 2*mult*num_channels, kernel_size, stride, padding, output_padding=(out_dim//2)%2)
+        # self.deconv3 = nn.ConvTranspose1d(2*mult*num_channels, num_channels, kernel_size, stride, padding, output_padding=(out_dim)%2)
+
+        self.relu = nn.ReLU()
+        self.tanh = nn.Tanh()
+
+        # for m in self.modules():
+        #     if isinstance(m, nn.ConvTranspose1d) or isinstance(m, nn.Conv1d):
+        #         nn.init.kaiming_normal(m.weight.data)
+
+    def forward(self, x):
+        if self.verbose:
+            print(f'ConvDec input shape: {x.shape}')
+
+        x = self.relu(self.deconv1(x))
+        if self.verbose:
+            print(f'ConvDec deconv1 output shape: {x.shape}')
+
+        x = self.relu(self.deconv2(x))
+        if self.verbose:
+            print(f'ConvDec deconv2 output shape: {x.shape}')
+
+        x = self.tanh(self.deconv3(x))
+        if self.verbose:
+            print(f'ConvDec deconv3 output shape: {x.shape}')
+
+        return x
+
+
+class ConvEnc(nn.Module):
+    def __init__(self, num_channels=1, stride=2, kernel_size=5, verbose=False, alpha=0.2,
+                 nonlinearity='leakyrelu'):
+        super(ConvEnc, self).__init__()
+        # Based on WaveGAN discriminator, but with only 3 donwsampling layers (instead of 5) 
+        # without the last linear layer
+        self.verbose = verbose
+
+        padding = (kernel_size-stride)//2 # so that out_dim = in_dim/stride
+        mult = 8
+        self.conv1 = nn.Conv1d(num_channels, 2*mult*num_channels, kernel_size, stride, padding)
+        self.conv2 = nn.Conv1d(2*mult*num_channels, 4*mult*num_channels, kernel_size, stride, padding)
+        self.conv3 = nn.Conv1d(4*mult*num_channels, 8*mult*num_channels, kernel_size, stride, padding)
+
+        if nonlinearity=='tanh':
+            self.nonlin = nn.Tanh()
+        elif nonlinearity=='leakyrelu':
+            self.nonlin = nn.LeakyReLU(negative_slope=alpha)
+        else:
+            self.nonlin = nn.ReLU()
+        self.tanh = nn.Tanh()
+
+        shift_factor = 2
+        self.ps1 = PhaseShuffle(shift_factor)
+        self.ps2 = PhaseShuffle(shift_factor)
+
+        # for m in self.modules():
+        #     if isinstance(m, nn.ConvTranspose1d) or isinstance(m, nn.Conv1d):
+        #         nn.init.kaiming_normal(m.weight.data)
+    
+    def forward(self, x):
+        if self.verbose:
+            print(f'ConvEnc input shape: {x.shape}')
+
+        x = self.nonlin(self.conv1(x))
+        if self.verbose:
+            print(f'ConvEnc conv1 output shape: {x.shape}')
+        x = self.ps1(x)
+
+        x = self.nonlin(self.conv2(x))
+        if self.verbose:
+            print(f'ConvEnc conv2 output shape: {x.shape}')
+        x = self.ps2(x)
+
+        x = self.tanh(self.conv3(x))
+        if self.verbose:
+            print(f'ConvEnc conv3 output shape: {x.shape}')
+
+        return x
+
+class PhaseShuffle(nn.Module):
+    """
+    Performs phase shuffling, i.e. shifting feature axis of a 3D tensor
+    by a random integer in {-n, n} and performing reflection padding where
+    necessary.
+    """
+    # Copied from https://github.com/jtcramer/wavegan/blob/master/wavegan.py#L8
+    def __init__(self, shift_factor):
+        super(PhaseShuffle, self).__init__()
+        self.shift_factor = shift_factor
+
+    def forward(self, x):
+        if self.shift_factor == 0:
+            return x
+        # uniform in (L, R)
+        k_list = torch.Tensor(x.shape[0]).random_(0, 2 * self.shift_factor + 1) - self.shift_factor
+        k_list = k_list.numpy().astype(int)
+
+        # Combine sample indices into lists so that less shuffle operations
+        # need to be performed
+        k_map = {}
+        for idx, k in enumerate(k_list):
+            k = int(k)
+            if k not in k_map:
+                k_map[k] = []
+            k_map[k].append(idx)
+
+        # Make a copy of x for our output
+        x_shuffle = x.clone()
+
+        # Apply shuffle to each sample
+        for k, idxs in k_map.items():
+            if k > 0:
+                x_shuffle[idxs] = F.pad(x[idxs][..., :-k], (k, 0), mode='reflect')
+            else:
+                x_shuffle[idxs] = F.pad(x[idxs][..., -k:], (0, -k), mode='reflect')
+
+        assert x_shuffle.shape == x.shape, "{}, {}".format(x_shuffle.shape,
+                                                       x.shape)
+        return x_shuffle
