@@ -24,6 +24,7 @@ def getBasicParser(description: Optional[str] = None):
     parser.add_argument(
         "--seed",
         default=0,
+        type=int,
         help='Seed for random generators.'
     )
     parser.add_argument(
