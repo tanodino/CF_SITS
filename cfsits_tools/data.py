@@ -176,18 +176,31 @@ def _loadUCRtsv(name, train_or_test, data_path=None):
     return datatuple(X, y)
 
 
-def load_UCR_dataset(name, split, data_path=None):
+def load_UCR_dataset(name, split, data_path=None,reverse=False):
     _validate_split(split)
     # if split is valid, need to load train data file
-    file_split = 'TRAIN' if split.lower() == 'valid' else split.upper()
+    if name.endswith('-reversed'): # reverse train and test data
+        name = name[:-9] # remove suffix '-reversed'
+        print('\n>>> ATTENTION!! Reversing train and test datasets\n')
+        file_split = 'TEST' if split.lower() == 'valid'  or split.lower() == 'train' else 'TRAIN'
+        train = 'test'
+    else:
+        file_split = 'TRAIN' if split.lower() == 'valid' else split.upper()
+        train = 'train'
+
     X, y = _loadUCRtsv(name, file_split, data_path)
 
     # min-max-normalize data in X
     # if current split is test, need to load train data to get max and min 
-    X_train = (_loadUCRtsv(name, 'train', data_path).X
+    X_train = (_loadUCRtsv(name, train, data_path).X
                   if split.lower() == 'test'
                   else X)
     X = (X-X_train.min())/(X_train.max()-X_train.min())
+
+    # Percentile-based normalization
+    # X = (X-np.percentile(X_train,1))/(np.percentile(X_train,99)-np.percentile(X_train,1))
+    # Centering data
+    # X = X - ((X_train-X_train.min())/(X_train.max()-X_train.min())).mean()
 
     # if split is train or valid, need to split TRAIN file in two parts before returning the result
     if  split.lower() == 'train' or split.lower() == 'valid':
@@ -211,5 +224,5 @@ def list_UCR_datasets(data_path=None):
     exclude = ['Missing_value_and_variable_length_datasets_adjusted']
     exclude += os.listdir(os.path.join(data_path, UCR_DIR, exclude[0]))
     datasets = list(filter(lambda x: x not in exclude, datasets))
-    datasets
-    return datasets
+    datasets_reverse = [string + '-reversed' for string in datasets]
+    return datasets + datasets_reverse
